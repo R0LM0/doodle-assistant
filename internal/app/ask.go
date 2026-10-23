@@ -148,7 +148,7 @@ func (uc *Ask) generate(ctx context.Context, prompt domain.Prompt, emit func(del
 	}
 
 	start := time.Now()
-	err := uc.chat.Chat(ctx, messages, func(delta string) error {
+	_, err := uc.chat.Chat(ctx, ports.ChatRequest{Messages: messages}, func(delta string) error {
 		*text += delta
 		return emit(delta)
 	})
