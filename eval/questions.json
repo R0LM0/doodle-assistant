@@ -1,0 +1,112 @@
+{
+  "name": "doodle-assistant retrieval eval",
+  "version": 2,
+  "notes": "Relevant = the expected document appears in the top K AND (the heading contains expectedHeading OR the chunk content contains expectedText). The content fallback keeps the metric honest when small sections are merged into the previous chunk and lose their heading.",
+  "questions": [
+    {
+      "id": "q01",
+      "question": "¿Qué pincel simula cera y deja los bordes irregulares?",
+      "expectedSources": ["brushes.md"],
+      "expectedHeading": "Pinceles disponibles",
+      "expectedText": "simula cera"
+    },
+    {
+      "id": "q02",
+      "question": "¿Cuántos pasos guarda el historial de deshacer?",
+      "expectedSources": ["history.md"],
+      "expectedHeading": "Límite",
+      "expectedText": "200 pasos"
+    },
+    {
+      "id": "q03",
+      "question": "¿Cuál es el tope de resolución al exportar?",
+      "expectedSources": ["export.md"],
+      "expectedHeading": "Escala",
+      "expectedText": "1920 × 1080"
+    },
+    {
+      "id": "q04",
+      "question": "¿Qué hace la tecla A?",
+      "expectedSources": ["live-animation.md"],
+      "expectedHeading": "Atajo",
+      "expectedText": "prende y apaga el hervido"
+    },
+    {
+      "id": "q05",
+      "question": "¿Cuántas capas admite como máximo un proyecto?",
+      "expectedSources": ["layers.md"],
+      "expectedHeading": "capa",
+      "expectedText": "50 capas"
+    },
+    {
+      "id": "q06",
+      "question": "¿Qué formatos de imagen puedo importar y cuáles no?",
+      "expectedSources": ["images.md"],
+      "expectedHeading": "Formatos",
+      "expectedText": "soporta transparencia"
+    },
+    {
+      "id": "q07",
+      "question": "¿Cómo hago zoom en el punto donde está el cursor?",
+      "expectedSources": ["viewport.md"],
+      "expectedHeading": "Zoom",
+      "expectedText": "donde está el cursor"
+    },
+    {
+      "id": "q08",
+      "question": "¿Cada cuánto se ejecuta el autoguardado?",
+      "expectedSources": ["projects.md"],
+      "expectedHeading": "Autoguardado",
+      "expectedText": "cada 10 segundos"
+    },
+    {
+      "id": "q09",
+      "question": "¿La goma borra píxeles o trazos completos?",
+      "expectedSources": ["brushes.md"],
+      "expectedHeading": "Borrado",
+      "expectedText": "trazos completos"
+    },
+    {
+      "id": "q10",
+      "question": "¿Cuál es la diferencia entre el motor de redibujado de tiempo fijo y el cinético?",
+      "expectedSources": ["live-animation.md"],
+      "expectedHeading": "Motores",
+      "expectedText": "motor cinético"
+    },
+    {
+      "id": "q11",
+      "question": "¿Se puede importar un archivo SVG?",
+      "expectedSources": ["images.md"],
+      "expectedHeading": "Formatos",
+      "expectedText": "SVG no están soportados"
+    },
+    {
+      "id": "q12",
+      "question": "¿Qué limitación tiene exportar a GIF con fondo transparente?",
+      "expectedSources": ["export.md"],
+      "expectedHeading": "Fondo",
+      "expectedText": "no admite semitransparencia"
+    },
+    {
+      "id": "q13",
+      "question": "¿Cómo duplico una capa y qué incluye la copia?",
+      "expectedSources": ["layers.md"],
+      "expectedHeading": "Operaciones",
+      "expectedText": "incluidos trazos"
+    },
+    {
+      "id": "q14",
+      "question": "¿El archivo .json del proyecto incluye las imágenes?",
+      "expectedSources": ["projects.md"],
+      "expectedHeading": "Guardar",
+      "expectedText": "imágenes embebidas en base64"
+    },
+    {
+      "id": "q15",
+      "question": "¿Qué rango de FPS acepta la exportación?",
+      "expectedSources": ["export.md"],
+      "expectedHeading": "FPS",
+      "expectedText": "de 1 a 60"
+    }
+  ]
+}

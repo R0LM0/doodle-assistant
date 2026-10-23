@@ -4,14 +4,17 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/r0lm0/doodle-assistant/internal/app"
+	"github.com/r0lm0/doodle-assistant/internal/eval"
 	"github.com/r0lm0/doodle-assistant/internal/ports"
 )
 
@@ -30,6 +33,11 @@ type StatsReader interface {
 	Stats(ctx context.Context) (ports.StoreStats, error)
 }
 
+// Evaluator measures retrieval quality against a dataset.
+type Evaluator interface {
+	Evaluate(ctx context.Context, questionsPath string, ks []int, verbose bool) (eval.Report, error)
+}
+
 // Asker answers questions, with or without retrieval.
 type Asker interface {
 	Ask(ctx context.Context, question string, emit func(delta string) error) (app.AskResult, error)
@@ -39,13 +47,14 @@ type Asker interface {
 // Deps is everything the CLI needs. Out and Err make it testable without a
 // terminal.
 type Deps struct {
-	Migrator MigrationApplier
-	Ingester Ingester
-	Asker    Asker
-	Stats    StatsReader
-	Out      io.Writer
-	Err      io.Writer
-	Logger   *slog.Logger
+	Migrator  MigrationApplier
+	Ingester  Ingester
+	Asker     Asker
+	Evaluator Evaluator
+	Stats     StatsReader
+	Out       io.Writer
+	Err       io.Writer
+	Logger    *slog.Logger
 }
 
 // CLI dispatches subcommands and returns a process exit code.
@@ -62,11 +71,16 @@ Commands:
   migrate   apply pending SQL migrations
   ingest    chunk, embed and store the markdown knowledge base
   ask       answer a question from the knowledge base (streaming)
+  eval      measure recall@K of the retriever against a dataset
   stats     show how many documents and chunks are indexed
   help      show this message
 
 Ask options:
   -no-context   answer without retrieval, to compare against RAG
+
+Eval options:
+  -questions    dataset path (default eval/questions.json)
+  -k            comma separated K values (default 1,3,5,8)
 `
 
 // Exit codes: 0 success, 1 runtime failure, 2 usage error.
@@ -106,6 +120,8 @@ func (c *CLI) Run(ctx context.Context, args []string) int {
 		return c.ingest(ctx)
 	case "ask":
 		return c.ask(ctx, args[1:])
+	case "eval":
+		return c.eval(ctx, args[1:])
 	case "stats":
 		return c.stats(ctx)
 	default:
@@ -211,6 +227,59 @@ func (c *CLI) ask(ctx context.Context, args []string) int {
 		result.Retrieved,
 	)
 	return exitOK
+}
+
+func (c *CLI) eval(ctx context.Context, args []string) int {
+	flags := flag.NewFlagSet("eval", flag.ContinueOnError)
+	flags.SetOutput(c.deps.Err)
+	questionsPath := flags.String("questions", "eval/questions.json", "path to the evaluation dataset")
+	ksFlag := flags.String("k", "1,3,5,8", "comma separated K values")
+	verbose := flags.Bool("verbose", false, "print the rank of each question")
+	if err := flags.Parse(args); err != nil {
+		return exitUsage
+	}
+
+	ks, err := parseKs(*ksFlag)
+	if err != nil {
+		fmt.Fprintf(c.deps.Err, "eval: %v\n", err)
+		return exitUsage
+	}
+	if c.deps.Evaluator == nil {
+		fmt.Fprintln(c.deps.Err, "eval: no evaluator configured")
+		return exitFailure
+	}
+
+	report, err := c.deps.Evaluator.Evaluate(ctx, *questionsPath, ks, *verbose)
+	if err != nil {
+		fmt.Fprintf(c.deps.Err, "eval: %v\n", err)
+		return exitFailure
+	}
+
+	fmt.Fprint(c.deps.Out, report.String())
+	return exitOK
+}
+
+func parseKs(raw string) ([]int, error) {
+	parts := strings.Split(raw, ",")
+	ks := make([]int, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		k, err := strconv.Atoi(part)
+		if err != nil {
+			return nil, fmt.Errorf("K must be an integer, got %q", part)
+		}
+		if k <= 0 {
+			return nil, fmt.Errorf("K must be positive, got %d", k)
+		}
+		ks = append(ks, k)
+	}
+	if len(ks) == 0 {
+		return nil, errors.New("at least one K value is required")
+	}
+	return ks, nil
 }
 
 func (c *CLI) stats(ctx context.Context) int {

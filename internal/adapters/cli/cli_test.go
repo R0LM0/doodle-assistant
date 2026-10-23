@@ -11,6 +11,7 @@ import (
 	"github.com/r0lm0/doodle-assistant/internal/adapters/cli"
 	"github.com/r0lm0/doodle-assistant/internal/app"
 	"github.com/r0lm0/doodle-assistant/internal/domain"
+	"github.com/r0lm0/doodle-assistant/internal/eval"
 	"github.com/r0lm0/doodle-assistant/internal/ports"
 )
 
@@ -230,5 +231,63 @@ func TestAskRequiresAQuestionAndHonoursNoContext(t *testing.T) {
 	}
 	if !asker.noContext {
 		t.Error("-no-context must use the control path")
+	}
+}
+
+type fakeEvaluator struct {
+	report  eval.Report
+	err     error
+	path    string
+	ks      []int
+	verbose bool
+}
+
+func (f *fakeEvaluator) Evaluate(_ context.Context, questionsPath string, ks []int, verbose bool) (eval.Report, error) {
+	f.verbose = verbose
+	f.path = questionsPath
+	f.ks = ks
+	return f.report, f.err
+}
+
+func TestEvalRunsAndPrintsTheReport(t *testing.T) {
+	ev := &fakeEvaluator{report: eval.Report{
+		Questions: 15,
+		TopK:      8,
+		Recall:    map[int]float64{1: 0.6, 8: 1},
+		MRR:       0.78,
+		Misses:    []string{"q15"},
+	}}
+	c, out, _ := newCLI(t, cli.Deps{Evaluator: ev})
+
+	if code := c.Run(context.Background(), []string{"eval", "-k", "1,8"}); code != 0 {
+		t.Fatalf("exit code = %d", code)
+	}
+
+	got := out.String()
+	for _, want := range []string{"recall@1", "0.600", "recall@8", "1.000", "0.780", "misses: q15"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("stdout missing %q:\n%s", want, got)
+		}
+	}
+	if len(ev.ks) != 2 || ev.ks[0] != 1 || ev.ks[1] != 8 {
+		t.Errorf("K values sent = %v, want [1 8]", ev.ks)
+	}
+	if ev.path != "eval/questions.json" {
+		t.Errorf("dataset path = %q, want the default", ev.path)
+	}
+}
+
+func TestEvalRejectsInvalidK(t *testing.T) {
+	ev := &fakeEvaluator{}
+	c, _, errOut := newCLI(t, cli.Deps{Evaluator: ev})
+
+	if code := c.Run(context.Background(), []string{"eval", "-k", "uno"}); code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(errOut.String(), "K must be an integer") {
+		t.Errorf("stderr = %q", errOut.String())
+	}
+	if code := c.Run(context.Background(), []string{"eval", "-k", "0"}); code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
 	}
 }
