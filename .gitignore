@@ -1,0 +1,8 @@
+.env
+.atl/
+bin/
+*.exe
+*.test
+*.out
+/tmp/
+.DS_Store

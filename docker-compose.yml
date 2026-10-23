@@ -1,0 +1,28 @@
+name: doodle-assistant
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: doodle-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-doodle}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-doodle}
+      POSTGRES_DB: ${POSTGRES_DB:-doodle}
+    ports:
+      # 5433 is already taken by another local stack, 5432 by a native Postgres.
+      - "127.0.0.1:${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      # postgres:18+ images store data in a versioned subdirectory of
+      # /var/lib/postgresql; mounting .../data is rejected at startup.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h 127.0.0.1"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+volumes:
+  pgdata:
+    name: doodle-pgdata
