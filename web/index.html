@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>doodle-assistant</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <a class="skip" href="#preguntar">Saltar al formulario</a>
+
+    <main>
+      <header>
+        <h1>doodle-assistant</h1>
+        <p class="lead">Documentación de la app de dibujo, respondida con RAG o con un agente que puede tocar el canvas.</p>
+        <p id="stats" class="stats" aria-live="polite"></p>
+      </header>
+
+      <section aria-labelledby="preguntar-title">
+        <h2 id="preguntar-title">Preguntar</h2>
+        <form id="ask-form">
+          <label for="ask-input">¿Qué querés saber?</label>
+          <textarea id="ask-input" name="question" rows="3" maxlength="2000" required
+                    placeholder="¿Qué limitación tiene exportar a GIF con fondo transparente?"></textarea>
+
+          <div class="row">
+            <label for="ask-mode">Modo</label>
+            <select id="ask-mode" name="mode">
+              <option value="rag">RAG (busca y cita)</option>
+              <option value="agentic">Agéntico (busca, juzga, reformula)</option>
+              <option value="none">Sin contexto (control)</option>
+            </select>
+            <button type="submit" id="ask-submit">Preguntar</button>
+            <button type="button" id="ask-cancel" hidden>Cancelar</button>
+            <span class="hint">Ctrl + Enter para enviar</span>
+          </div>
+        </form>
+
+        <p id="ask-status" class="status" role="status" aria-live="polite"></p>
+        <div id="ask-error" class="error" role="alert" hidden></div>
+
+        <article id="ask-answer" class="answer" aria-live="polite" aria-busy="false"></article>
+
+        <div id="ask-timings" class="timings" hidden></div>
+
+        <section id="ask-sources-wrap" hidden aria-labelledby="sources-title">
+          <h3 id="sources-title">Fuentes</h3>
+          <p class="hint">Elegí una fuente para ver el fragmento exacto que se usó.</p>
+          <ul id="ask-sources" class="sources"></ul>
+        </section>
+      </section>
+
+      <section aria-labelledby="agente-title">
+        <h2 id="agente-title">Agente</h2>
+        <form id="agent-form">
+          <label for="agent-input">Pedido para el canvas o la documentación</label>
+          <textarea id="agent-input" name="prompt" rows="3" maxlength="2000" required
+                    placeholder="¿Cuál es el tope de exportación? Después poné el crayon en jiggle 8."></textarea>
+          <div class="row">
+            <button type="submit" id="agent-submit">Ejecutar</button>
+            <span class="hint">El agente solo puede usar las tools del canvas y search_docs.</span>
+          </div>
+        </form>
+
+        <p id="agent-status" class="status" role="status" aria-live="polite"></p>
+        <div id="agent-error" class="error" role="alert" hidden></div>
+        <article id="agent-answer" class="answer" aria-live="polite" aria-busy="false"></article>
+
+        <section id="agent-tools-wrap" hidden aria-labelledby="tools-title">
+          <h3 id="tools-title">Herramientas ejecutadas</h3>
+          <ol id="agent-tools" class="tools"></ol>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

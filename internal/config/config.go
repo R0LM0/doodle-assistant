@@ -25,6 +25,8 @@ const (
 	defaultChunkOverlap   = 150
 	defaultChunkMinChars  = 200
 	defaultDocsDir        = "docs"
+	defaultHTTPAddr       = ":8080"
+	defaultWebDir         = "web/dist"
 	defaultLogLevel       = "info"
 )
 
@@ -41,6 +43,8 @@ type Config struct {
 	ChunkOverlap   int
 	ChunkMinChars  int
 	DocsDir        string
+	HTTPAddr       string
+	WebDir         string
 	LogLevel       slog.Level
 }
 
@@ -89,6 +93,8 @@ func Load() (Config, error) {
 		ChunkOverlap:   chunkOverlap,
 		ChunkMinChars:  chunkMin,
 		DocsDir:        env("DOCS_DIR", defaultDocsDir),
+		HTTPAddr:       env("HTTP_ADDR", defaultHTTPAddr),
+		WebDir:         env("WEB_DIR", defaultWebDir),
 		LogLevel:       level,
 	}
 
@@ -101,6 +107,9 @@ func Load() (Config, error) {
 func (c Config) validate() error {
 	if strings.TrimSpace(c.DatabaseURL) == "" {
 		return errors.New("config: DATABASE_URL must not be empty")
+	}
+	if strings.TrimSpace(c.HTTPAddr) == "" {
+		return errors.New("config: HTTP_ADDR must not be empty")
 	}
 	if strings.TrimSpace(c.OllamaBaseURL) == "" {
 		return errors.New("config: OLLAMA_BASE_URL must not be empty")
