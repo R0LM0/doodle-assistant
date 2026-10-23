@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,11 @@ type Ingester interface {
 // StatsReader reports how much is indexed.
 type StatsReader interface {
 	Stats(ctx context.Context) (ports.StoreStats, error)
+}
+
+// AgenticAsker answers with search-judge-reformulate retrieval.
+type AgenticAsker interface {
+	Ask(ctx context.Context, question string, emit func(delta string) error) (app.AgenticResult, error)
 }
 
 // AgentRunner runs the tool-calling loop.
@@ -57,6 +63,10 @@ type Deps struct {
 	Asker     Asker
 	Evaluator Evaluator
 	Agent     AgentRunner
+	Agentic   AgenticAsker
+	Retriever eval.Retriever
+	Handler   http.Handler
+	HTTPAddr  string
 	Stats     StatsReader
 	Out       io.Writer
 	Err       io.Writer
@@ -79,15 +89,19 @@ Commands:
   ask       answer a question from the knowledge base (streaming)
   eval      measure recall@K of the retriever against a dataset
   agent     run the tool-calling agent over a simulated canvas
+  serve     start the HTTP API and the UI
   stats     show how many documents and chunks are indexed
   help      show this message
 
 Ask options:
   -no-context   answer without retrieval, to compare against RAG
+  -agentic      search, judge the evidence and reformulate before answering
 
 Eval options:
   -questions    dataset path (default eval/questions.json)
   -k            comma separated K values (default 1,3,5,8)
+  -agentic      measure the agentic retriever instead of the single-shot one
+  -verbose      print the rank of every question
 `
 
 // Exit codes: 0 success, 1 runtime failure, 2 usage error.
@@ -131,6 +145,8 @@ func (c *CLI) Run(ctx context.Context, args []string) int {
 		return c.eval(ctx, args[1:])
 	case "agent":
 		return c.agent(ctx, args[1:])
+	case "serve":
+		return c.serve(ctx)
 	case "stats":
 		return c.stats(ctx)
 	default:
@@ -189,6 +205,7 @@ func (c *CLI) ask(ctx context.Context, args []string) int {
 	flags := flag.NewFlagSet("ask", flag.ContinueOnError)
 	flags.SetOutput(c.deps.Err)
 	noContext := flags.Bool("no-context", false, "answer without retrieval (control group)")
+	agentic := flags.Bool("agentic", false, "search, judge and reformulate before answering")
 	if err := flags.Parse(args); err != nil {
 		return exitUsage
 	}
@@ -212,9 +229,32 @@ func (c *CLI) ask(ctx context.Context, args []string) int {
 		result app.AskResult
 		err    error
 	)
-	if *noContext {
+	switch {
+	case *agentic:
+		if c.deps.Agentic == nil {
+			fmt.Fprintln(c.deps.Err, "ask: no agentic asker configured")
+			return exitFailure
+		}
+		agenticResult, agenticErr := c.deps.Agentic.Ask(ctx, question, stream)
+		err = agenticErr
+		// Judge time is retrieval work, not generation: fold it into search so the
+		// printed line cannot suggest the model got faster.
+		result = app.AskResult{
+			Answer:       agenticResult.Answer,
+			Retrieved:    agenticResult.Retrieved,
+			EmbedTime:    agenticResult.EmbedTime,
+			SearchTime:   agenticResult.SearchTime + agenticResult.JudgeTime,
+			GenerateTime: agenticResult.GenerateTime,
+		}
+		if agenticErr == nil {
+			fmt.Fprintln(c.deps.Out)
+			fmt.Fprintf(c.deps.Out, "intentos: %d\n", agenticResult.Attempts)
+			fmt.Fprintf(c.deps.Out, "consultas: %s\n", strings.Join(agenticResult.Queries, " | "))
+			fmt.Fprintf(c.deps.Out, "juez: %s\n", agenticResult.JudgeReason)
+		}
+	case *noContext:
 		result, err = c.deps.Asker.AskWithoutContext(ctx, question, stream)
-	} else {
+	default:
 		result, err = c.deps.Asker.Ask(ctx, question, stream)
 	}
 	if err != nil {
@@ -240,6 +280,44 @@ func (c *CLI) ask(ctx context.Context, args []string) int {
 
 // agent streams the final answer and prints what the model asked for, so the
 // tool calls stay auditable instead of happening behind the answer.
+// serve runs the HTTP API until the context is cancelled (Ctrl+C), then shuts
+// down gracefully so in-flight answers are not cut mid-stream.
+func (c *CLI) serve(ctx context.Context) int {
+	if c.deps.Handler == nil {
+		fmt.Fprintln(c.deps.Err, "serve: no handler configured")
+		return exitFailure
+	}
+
+	addr := c.deps.HTTPAddr
+	if addr == "" {
+		addr = ":8080"
+	}
+
+	server := &http.Server{
+		Addr:              addr,
+		Handler:           c.deps.Handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		// No WriteTimeout on purpose: an SSE stream can last minutes.
+	}
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+	}()
+
+	fmt.Fprint(c.deps.Out, "escuchando en http://localhost")
+	fmt.Fprintln(c.deps.Out, addr)
+
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		fmt.Fprint(c.deps.Err, "serve: ")
+		fmt.Fprintln(c.deps.Err, err)
+		return exitFailure
+	}
+	return exitOK
+}
+
 func (c *CLI) agent(ctx context.Context, args []string) int {
 	prompt := strings.TrimSpace(strings.Join(args, " "))
 	if prompt == "" {
@@ -289,6 +367,7 @@ func (c *CLI) eval(ctx context.Context, args []string) int {
 	questionsPath := flags.String("questions", "eval/questions.json", "path to the evaluation dataset")
 	ksFlag := flags.String("k", "1,3,5,8", "comma separated K values")
 	verbose := flags.Bool("verbose", false, "print the rank of each question")
+	agentic := flags.Bool("agentic", false, "measure the agentic retriever")
 	if err := flags.Parse(args); err != nil {
 		return exitUsage
 	}
@@ -303,7 +382,19 @@ func (c *CLI) eval(ctx context.Context, args []string) int {
 		return exitFailure
 	}
 
-	report, err := c.deps.Evaluator.Evaluate(ctx, *questionsPath, ks, *verbose)
+	var report eval.Report
+	if *agentic {
+		runner, ok := c.deps.Evaluator.(interface {
+			EvaluateWith(ctx context.Context, path string, ks []int, verbose bool, retriever eval.Retriever) (eval.Report, error)
+		})
+		if !ok || c.deps.Retriever == nil {
+			fmt.Fprintln(c.deps.Err, "eval: agentic evaluation is not configured")
+			return exitFailure
+		}
+		report, err = runner.EvaluateWith(ctx, *questionsPath, ks, *verbose, c.deps.Retriever)
+	} else {
+		report, err = c.deps.Evaluator.Evaluate(ctx, *questionsPath, ks, *verbose)
+	}
 	if err != nil {
 		fmt.Fprintf(c.deps.Err, "eval: %v\n", err)
 		return exitFailure

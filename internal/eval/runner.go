@@ -9,6 +9,12 @@ import (
 	"github.com/r0lm0/doodle-assistant/internal/ports"
 )
 
+// Retriever turns a question into hits. The agentic retriever implements it too, so
+// the same dataset can score single-shot retrieval against search-judge-reformulate.
+type Retriever interface {
+	Retrieve(ctx context.Context, question string, topK int) ([]ports.SearchHit, error)
+}
+
 // Runner evaluates a dataset against the current index.
 type Runner struct {
 	embedder ports.Embedder
@@ -28,6 +34,12 @@ func NewRunner(embedder ports.Embedder, store ports.VectorStore) (*Runner, error
 // Evaluate embeds every question in one batch (15 questions in one HTTP call
 // instead of 15), retrieves the top K chunks for each and reports recall@K + MRR.
 func (r *Runner) Evaluate(ctx context.Context, questionsPath string, ks []int, verbose bool) (Report, error) {
+	return r.EvaluateWith(ctx, questionsPath, ks, verbose, nil)
+}
+
+// EvaluateWith scores the dataset using an alternative retriever (agentic RAG).
+// A non-nil retriever disables the batched plain retrieval.
+func (r *Runner) EvaluateWith(ctx context.Context, questionsPath string, ks []int, verbose bool, retriever Retriever) (Report, error) {
 	questions, err := LoadQuestions(questionsPath)
 	if err != nil {
 		return Report{}, err
@@ -43,7 +55,7 @@ func (r *Runner) Evaluate(ctx context.Context, questionsPath string, ks []int, v
 	sort.Ints(ks)
 	topK := ks[len(ks)-1]
 
-	results, err := r.retrieve(ctx, questions, topK)
+	results, err := r.retrieveWith(ctx, questions, topK, retriever)
 	if err != nil {
 		return Report{}, err
 	}
@@ -67,6 +79,22 @@ func (r *Runner) Evaluate(ctx context.Context, questionsPath string, ks []int, v
 	}
 
 	return report, nil
+}
+
+func (r *Runner) retrieveWith(ctx context.Context, questions []Question, topK int, retriever Retriever) ([]Retrieved, error) {
+	if retriever != nil {
+		results := make([]Retrieved, len(questions))
+		for i, question := range questions {
+			hits, err := retriever.Retrieve(ctx, question.Question, topK)
+			if err != nil {
+				return nil, fmt.Errorf("eval: retrieve for %s: %w", question.ID, err)
+			}
+			results[i] = Retrieved{Question: question, Hits: hits}
+		}
+		return results, nil
+	}
+
+	return r.retrieve(ctx, questions, topK)
 }
 
 func (r *Runner) retrieve(ctx context.Context, questions []Question, topK int) ([]Retrieved, error) {

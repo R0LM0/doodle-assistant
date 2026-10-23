@@ -15,6 +15,7 @@ import (
 
 	"github.com/r0lm0/doodle-assistant/internal/adapters/cli"
 	"github.com/r0lm0/doodle-assistant/internal/adapters/filesystem"
+	httpadapter "github.com/r0lm0/doodle-assistant/internal/adapters/http"
 	"github.com/r0lm0/doodle-assistant/internal/adapters/memory"
 	"github.com/r0lm0/doodle-assistant/internal/adapters/ollama"
 	"github.com/r0lm0/doodle-assistant/internal/adapters/postgres"
@@ -132,6 +133,29 @@ func run() int {
 		return 1
 	}
 
+	// Phase 5: the same agent may now decide to search the documentation.
+	searchTool, err := app.NewSearchDocsTool(embedder, store, cfg.TopK)
+	if err != nil {
+		logger.Error("build search_docs tool", "error", err)
+		return 1
+	}
+	agentTools = append(agentTools, searchTool)
+
+	evidenceJudge, err := app.NewEvidenceJudge(chatModel)
+	if err != nil {
+		logger.Error("build evidence judge", "error", err)
+		return 1
+	}
+
+	agentic, err := app.NewAgenticAsk(embedder, store, chatModel, evidenceJudge, app.AgenticConfig{
+		TopK:   cfg.TopK,
+		Logger: logger,
+	})
+	if err != nil {
+		logger.Error("build agentic ask", "error", err)
+		return 1
+	}
+
 	agentRunner, err := app.NewRunAgent(chatModel, agentTools, app.RunAgentConfig{Logger: logger})
 	if err != nil {
 		logger.Error("build agent", "error", err)
@@ -144,12 +168,29 @@ func run() int {
 		return 1
 	}
 
+	web, err := httpadapter.NewServer(httpadapter.Deps{
+		Asker:   asker,
+		Agentic: agentic,
+		Agent:   agentRunner,
+		Stats:   store,
+		WebDir:  cfg.WebDir,
+		Logger:  logger,
+	})
+	if err != nil {
+		logger.Error("build http server", "error", err)
+		return 1
+	}
+
 	cmd, err := cli.New(cli.Deps{
 		Migrator:  migrator,
 		Ingester:  ingester,
 		Asker:     asker,
 		Evaluator: evaluator,
 		Agent:     agentRunner,
+		Agentic:   agentic,
+		Retriever: agentic,
+		Handler:   web.Handler(),
+		HTTPAddr:  cfg.HTTPAddr,
 		Stats:     store,
 		Out:       os.Stdout,
 		Err:       os.Stderr,
