@@ -146,6 +146,23 @@ function renderSources(list: Source[]): void {
   }
 }
 
+/** pretty formats JSON results; anything that is not JSON is shown as-is. */
+function pretty(value: string): string {
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
+  }
+}
+
+function compact(value: string): string {
+  try {
+    return JSON.stringify(JSON.parse(value));
+  } catch {
+    return value;
+  }
+}
+
 function renderTools(traces: ToolTrace[]): void {
   agentTools.replaceChildren();
   agentToolsWrap.hidden = traces.length === 0;
@@ -153,10 +170,10 @@ function renderTools(traces: ToolTrace[]): void {
   for (const trace of traces) {
     const item = document.createElement("li");
     const title = document.createElement("code");
-    title.textContent = `[${trace.iteration}] ${trace.name}(${trace.arguments})`;
+    title.textContent = `[${trace.iteration}] ${trace.name}(${compact(trace.arguments)})`;
     const outcome = document.createElement("p");
     outcome.className = trace.error ? "tool-error" : "tool-result";
-    outcome.textContent = trace.error ? `ERROR: ${trace.error}` : trace.result;
+    outcome.textContent = trace.error ? `ERROR: ${trace.error}` : pretty(trace.result);
     item.append(title, outcome);
     agentTools.append(item);
   }
