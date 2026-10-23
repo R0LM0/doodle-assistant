@@ -4,8 +4,11 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
+	"math"
+	"sort"
 	"sync"
 
 	"github.com/r0lm0/doodle-assistant/internal/domain"
@@ -15,6 +18,7 @@ import (
 var (
 	_ ports.Embedder    = (*Embedder)(nil)
 	_ ports.VectorStore = (*VectorStore)(nil)
+	_ ports.ChatModel   = (*ChatModel)(nil)
 )
 
 // Embedder is a deterministic fake: the same text always yields the same vector,
@@ -168,6 +172,102 @@ func (s *VectorStore) Stats(ctx context.Context) (ports.StoreStats, error) {
 		stats.Chunks += len(doc.Chunks)
 	}
 	return stats, nil
+}
+
+// Search ranks every stored chunk by cosine distance, brute force. The fake is for
+// tests, not for scale: it exists to prove the use case wires retrieval correctly.
+func (s *VectorStore) Search(ctx context.Context, embedding []float32, limit int) ([]ports.SearchHit, error) {
+	if len(embedding) == 0 {
+		return nil, errors.New("memory store: search embedding is empty")
+	}
+	if limit <= 0 {
+		return nil, fmt.Errorf("memory store: search limit must be positive, got %d", limit)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	hits := make([]ports.SearchHit, 0, len(s.docs))
+	for _, doc := range s.docs {
+		for _, chunk := range doc.Chunks {
+			hits = append(hits, ports.SearchHit{
+				SourcePath:  doc.SourcePath,
+				Title:       doc.Title,
+				HeadingPath: chunk.HeadingPath,
+				Position:    chunk.Position,
+				Content:     chunk.Content,
+				Distance:    cosineDistance(embedding, chunk.Embedding),
+			})
+		}
+	}
+
+	sort.SliceStable(hits, func(i, j int) bool { return hits[i].Distance < hits[j].Distance })
+	if len(hits) > limit {
+		hits = hits[:limit]
+	}
+	return hits, nil
+}
+
+func cosineDistance(a, b []float32) float64 {
+	if len(a) == 0 || len(a) != len(b) {
+		return 1
+	}
+
+	var dot, normA, normB float64
+	for i := range a {
+		dot += float64(a[i]) * float64(b[i])
+		normA += float64(a[i]) * float64(a[i])
+		normB += float64(b[i]) * float64(b[i])
+	}
+	if normA == 0 || normB == 0 {
+		return 1
+	}
+	return 1 - dot/(math.Sqrt(normA)*math.Sqrt(normB))
+}
+
+// ChatModel is a fake chat model: it records every conversation and replays the
+// configured deltas, so the application can be tested without a model.
+type ChatModel struct {
+	mu            sync.Mutex
+	Conversations [][]ports.Message
+	Deltas        []string
+	Err           error
+}
+
+func (c *ChatModel) Chat(ctx context.Context, messages []ports.Message, emit func(delta string) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	c.Conversations = append(c.Conversations, append([]ports.Message(nil), messages...))
+	deltas := append([]string(nil), c.Deltas...)
+	err := c.Err
+	c.mu.Unlock()
+
+	if err != nil {
+		return err
+	}
+	for _, delta := range deltas {
+		if err := emit(delta); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// LastConversation returns the messages sent in the most recent call.
+func (c *ChatModel) LastConversation() []ports.Message {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if len(c.Conversations) == 0 {
+		return nil
+	}
+	return c.Conversations[len(c.Conversations)-1]
 }
 
 // SaveCount reports how many times SaveDocument ran.

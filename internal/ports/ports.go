@@ -21,7 +21,38 @@ type Embedder interface {
 type VectorStore interface {
 	DocumentHash(ctx context.Context, sourcePath string) (hash string, found bool, err error)
 	SaveDocument(ctx context.Context, doc domain.Document) (documentID int64, err error)
+	Search(ctx context.Context, embedding []float32, limit int) ([]SearchHit, error)
 	Stats(ctx context.Context) (StoreStats, error)
+}
+
+// SearchHit is one retrieved chunk plus the provenance the answer must cite.
+// Distance is cosine distance: 0 means identical direction, smaller is closer.
+type SearchHit struct {
+	SourcePath  string
+	Title       string
+	HeadingPath string
+	Position    int
+	Content     string
+	Distance    float64
+}
+
+// Chat roles.
+const (
+	RoleSystem = "system"
+	RoleUser   = "user"
+	RoleTool   = "tool"
+)
+
+// Message is one turn of a chat conversation.
+type Message struct {
+	Role    string
+	Content string
+}
+
+// ChatModel streams a completion. emit is called once per delta; returning an
+// error from emit aborts the stream and propagates the error.
+type ChatModel interface {
+	Chat(ctx context.Context, messages []Message, emit func(delta string) error) error
 }
 
 // StoreStats is a cheap "what is in the index" summary used by the CLI.
