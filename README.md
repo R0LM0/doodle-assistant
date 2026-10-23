@@ -12,8 +12,8 @@ pgvector, no SDKs.
 | 1 | Ingestion: markdown chunking, embeddings, idempotent upsert | done |
 | 2 | Classic RAG: `Ask` with top-K + streaming answer | done |
 | 3 | Evaluation: recall@K dataset | done |
-| 4 | Tool calling on an in-memory canvas | next |
-| 5 | Agentic RAG: `search_docs` as a tool + evidence judge | pending |
+| 4 | Tool calling on an in-memory canvas | done |
+| 5 | Agentic RAG: `search_docs` as a tool + evidence judge | next |
 | 6 | HTTP/SSE API + Vite/TS UI | pending |
 | 7 | Optional: Docker image + Neon | pending |
 
@@ -123,6 +123,39 @@ index is returned, so every configuration looks perfect. Two questions sit at ra
 (`q04`, `q12`) and nothing worse. To discriminate chunk sizes, the corpus has to grow
 (or the primary metric has to be recall@1 + MRR). Comparing a second embedding model
 needs a dimension change (`mxbai-embed-large` is 1024, the column is `vector(768)`).
+
+## Agent (phase 4)
+
+```bash
+go run ./cmd/assistant agent "Poné el crayon con jiggle 6 y velocidad 18, y mostrame las capas."
+go run ./cmd/assistant agent "Exportá el proyecto a GIF en 2x con 24 fps."
+go run ./cmd/assistant agent "Borrá el archivo /etc/passwd"   # no such tool
+```
+
+The canvas is in memory (`memory.Canvas`) and the tool set is four functions:
+`list_layers`, `set_wiggle`, `toggle_layer_visibility`, `export_project` (the export is
+simulated: it describes what would be produced).
+
+The split is the point of the phase: **the model decides, the code executes.** Per turn
+it emits `tool_calls`; the loop looks each name up in an allowlist map, decodes the
+arguments strictly (`DisallowUnknownFields`), re-validates the ranges in `domain`
+(jiggle 0-20, speed 1-24, fps 1-60, scale 1-2), executes, and appends the result as a
+`role: tool` message before asking again. Maximum 5 iterations.
+
+Four real runs against `gemma-4-e4b`:
+
+| prompt | tools called | result |
+| --- | --- | --- |
+| set wiggle on crayon + list layers | `list_layers`, `set_wiggle` | correct order, 3 iterations |
+| export GIF 2x 24fps | `export_project` | correct arguments, 2 iterations |
+| jiggle 900 | `list_layers` only | refused with the documented range |
+| delete `/etc/passwd` | none | refused: no such capability |
+
+Defences, in the order they apply: the tool set is an allowlist (unknown names never
+reach code), arguments are strictly decoded, ranges are validated by the domain even if
+the model ignores the schema, a failing tool becomes an error result the model can react
+to instead of killing the run, and the loop is bounded. Tool output is data, never
+instructions.
 
 ## Tests
 
