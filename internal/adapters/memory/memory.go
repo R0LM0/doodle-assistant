@@ -9,6 +9,7 @@ import (
 	"hash/fnv"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/r0lm0/doodle-assistant/internal/domain"
@@ -228,35 +229,64 @@ func cosineDistance(a, b []float32) float64 {
 	return 1 - dot/(math.Sqrt(normA)*math.Sqrt(normB))
 }
 
-// ChatModel is a fake chat model: it records every conversation and replays the
-// configured deltas, so the application can be tested without a model.
+// ChatTurn is one scripted model answer: text deltas, requested tool calls, or an
+// error. Scripting turns is what makes an agent loop testable without a model.
+type ChatTurn struct {
+	Deltas    []string
+	ToolCalls []ports.ToolCall
+	Err       error
+}
+
+// ChatModel is a fake chat model. With Turns it plays a script, one turn per call;
+// with only Deltas it answers the same way every time.
 type ChatModel struct {
 	mu            sync.Mutex
 	Conversations [][]ports.Message
+	Requests      []ports.ChatRequest
+	Turns         []ChatTurn
 	Deltas        []string
 	Err           error
+
+	next int
 }
 
-func (c *ChatModel) Chat(ctx context.Context, messages []ports.Message, emit func(delta string) error) error {
+func (c *ChatModel) Chat(ctx context.Context, req ports.ChatRequest, emit func(delta string) error) (ports.ChatResponse, error) {
+	var response ports.ChatResponse
+
 	if err := ctx.Err(); err != nil {
-		return err
+		return response, err
 	}
 
 	c.mu.Lock()
-	c.Conversations = append(c.Conversations, append([]ports.Message(nil), messages...))
-	deltas := append([]string(nil), c.Deltas...)
-	err := c.Err
+	c.Conversations = append(c.Conversations, append([]ports.Message(nil), req.Messages...))
+	c.Requests = append(c.Requests, req)
+
+	turn := ChatTurn{Deltas: append([]string(nil), c.Deltas...), Err: c.Err}
+	if len(c.Turns) > 0 {
+		index := c.next
+		if index >= len(c.Turns) {
+			index = len(c.Turns) - 1
+		}
+		turn = c.Turns[index]
+		c.next++
+	}
 	c.mu.Unlock()
 
-	if err != nil {
-		return err
+	if turn.Err != nil {
+		return response, turn.Err
 	}
-	for _, delta := range deltas {
+
+	var text strings.Builder
+	for _, delta := range turn.Deltas {
+		text.WriteString(delta)
 		if err := emit(delta); err != nil {
-			return err
+			return response, err
 		}
 	}
-	return nil
+
+	response.Content = text.String()
+	response.ToolCalls = turn.ToolCalls
+	return response, nil
 }
 
 // LastConversation returns the messages sent in the most recent call.
@@ -268,6 +298,24 @@ func (c *ChatModel) LastConversation() []ports.Message {
 		return nil
 	}
 	return c.Conversations[len(c.Conversations)-1]
+}
+
+// LastRequest returns the full request of the most recent call, including tools.
+func (c *ChatModel) LastRequest() (ports.ChatRequest, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if len(c.Requests) == 0 {
+		return ports.ChatRequest{}, false
+	}
+	return c.Requests[len(c.Requests)-1], true
+}
+
+// CallCount reports how many model calls happened.
+func (c *ChatModel) CallCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.Requests)
 }
 
 // SaveCount reports how many times SaveDocument ran.

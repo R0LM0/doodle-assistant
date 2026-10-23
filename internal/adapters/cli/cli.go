@@ -33,6 +33,11 @@ type StatsReader interface {
 	Stats(ctx context.Context) (ports.StoreStats, error)
 }
 
+// AgentRunner runs the tool-calling loop.
+type AgentRunner interface {
+	Run(ctx context.Context, prompt string, emit func(delta string) error) (app.AgentResult, error)
+}
+
 // Evaluator measures retrieval quality against a dataset.
 type Evaluator interface {
 	Evaluate(ctx context.Context, questionsPath string, ks []int, verbose bool) (eval.Report, error)
@@ -51,6 +56,7 @@ type Deps struct {
 	Ingester  Ingester
 	Asker     Asker
 	Evaluator Evaluator
+	Agent     AgentRunner
 	Stats     StatsReader
 	Out       io.Writer
 	Err       io.Writer
@@ -72,6 +78,7 @@ Commands:
   ingest    chunk, embed and store the markdown knowledge base
   ask       answer a question from the knowledge base (streaming)
   eval      measure recall@K of the retriever against a dataset
+  agent     run the tool-calling agent over a simulated canvas
   stats     show how many documents and chunks are indexed
   help      show this message
 
@@ -122,6 +129,8 @@ func (c *CLI) Run(ctx context.Context, args []string) int {
 		return c.ask(ctx, args[1:])
 	case "eval":
 		return c.eval(ctx, args[1:])
+	case "agent":
+		return c.agent(ctx, args[1:])
 	case "stats":
 		return c.stats(ctx)
 	default:
@@ -226,6 +235,51 @@ func (c *CLI) ask(ctx context.Context, args []string) int {
 		result.GenerateTime.Round(time.Millisecond),
 		result.Retrieved,
 	)
+	return exitOK
+}
+
+// agent streams the final answer and prints what the model asked for, so the
+// tool calls stay auditable instead of happening behind the answer.
+func (c *CLI) agent(ctx context.Context, args []string) int {
+	prompt := strings.TrimSpace(strings.Join(args, " "))
+	if prompt == "" {
+		fmt.Fprintln(c.deps.Err, "agent: missing prompt")
+		return exitUsage
+	}
+	if c.deps.Agent == nil {
+		fmt.Fprintln(c.deps.Err, "agent: no agent configured")
+		return exitFailure
+	}
+
+	stream := func(delta string) error {
+		_, err := fmt.Fprint(c.deps.Out, delta)
+		return err
+	}
+
+	result, err := c.deps.Agent.Run(ctx, prompt, stream)
+	if err != nil {
+		fmt.Fprintln(c.deps.Err)
+		fmt.Fprintf(c.deps.Err, "agent: %v\n", err)
+		return exitFailure
+	}
+	fmt.Fprintln(c.deps.Out)
+
+	if len(result.Tools) == 0 {
+		fmt.Fprintln(c.deps.Out, "---")
+		fmt.Fprintln(c.deps.Out, "herramientas: ninguna (el modelo respondió sin tools)")
+		return exitOK
+	}
+
+	fmt.Fprintln(c.deps.Out, "---")
+	fmt.Fprintf(c.deps.Out, "herramientas (%d):\n", len(result.Tools))
+	for _, trace := range result.Tools {
+		outcome := trace.Result
+		if trace.Error != "" {
+			outcome = "ERROR: " + trace.Error
+		}
+		fmt.Fprintf(c.deps.Out, "  [%d] %s(%s) -> %s\n", trace.Iteration, trace.Name, trace.Arguments, outcome)
+	}
+	fmt.Fprintf(c.deps.Out, "iteraciones: %d\n", result.Iterations)
 	return exitOK
 }
 

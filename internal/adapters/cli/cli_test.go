@@ -291,3 +291,74 @@ func TestEvalRejectsInvalidK(t *testing.T) {
 		t.Fatalf("exit code = %d, want 2", code)
 	}
 }
+
+type fakeAgent struct {
+	deltas []string
+	result app.AgentResult
+	err    error
+	prompt string
+}
+
+func (f *fakeAgent) Run(_ context.Context, prompt string, emit func(string) error) (app.AgentResult, error) {
+	f.prompt = prompt
+	for _, delta := range f.deltas {
+		if err := emit(delta); err != nil {
+			return f.result, err
+		}
+	}
+	return f.result, f.err
+}
+
+func TestAgentStreamsAnswerAndPrintsToolTrace(t *testing.T) {
+	agent := &fakeAgent{
+		deltas: []string{"Listo, ", "ajusté el hervido."},
+		result: app.AgentResult{
+			Answer:     "Listo, ajusté el hervido.",
+			Iterations: 2,
+			Tools: []app.ToolTrace{{
+				Iteration: 1,
+				Name:      app.ToolSetWiggle,
+				Arguments: `{"layer_id":"crayon","jiggle":6,"speed":18}`,
+				Result:    `{"layer":{"id":"crayon","jiggle":6}}`,
+			}},
+		},
+	}
+	c, out, _ := newCLI(t, cli.Deps{Agent: agent})
+
+	if code := c.Run(context.Background(), []string{"agent", "poné", "jiggle", "6"}); code != 0 {
+		t.Fatalf("exit code = %d", code)
+	}
+
+	got := out.String()
+	for _, want := range []string{"Listo, ajusté el hervido.", "herramientas (1)", "set_wiggle", "jiggle\":6", "iteraciones: 2"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("stdout missing %q:\n%s", want, got)
+		}
+	}
+	if agent.prompt != "poné jiggle 6" {
+		t.Errorf("prompt = %q (multi word args must be joined)", agent.prompt)
+	}
+}
+
+func TestAgentReportsToolErrorsAndRequiresPrompt(t *testing.T) {
+	agent := &fakeAgent{result: app.AgentResult{
+		Iterations: 2,
+		Tools:      []app.ToolTrace{{Iteration: 1, Name: app.ToolSetWiggle, Error: "canvas: jiggle must be between 0 and 20"}},
+	}}
+	c, out, _ := newCLI(t, cli.Deps{Agent: agent})
+
+	if code := c.Run(context.Background(), []string{"agent", "jiggle 900"}); code != 0 {
+		t.Fatalf("exit code = %d", code)
+	}
+	if !strings.Contains(out.String(), "ERROR: canvas: jiggle must be between 0 and 20") {
+		t.Errorf("tool error not shown:\n%s", out.String())
+	}
+
+	c, _, errOut := newCLI(t, cli.Deps{Agent: agent})
+	if code := c.Run(context.Background(), []string{"agent"}); code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(errOut.String(), "missing prompt") {
+		t.Errorf("stderr = %q", errOut.String())
+	}
+}
