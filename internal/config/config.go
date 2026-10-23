@@ -21,6 +21,9 @@ const (
 	defaultEmbedDim       = 768
 	defaultEmbedBatchSize = 32
 	defaultTopK           = 4
+	defaultChunkMaxChars  = 1200
+	defaultChunkOverlap   = 150
+	defaultChunkMinChars  = 200
 	defaultDocsDir        = "docs"
 	defaultLogLevel       = "info"
 )
@@ -34,6 +37,9 @@ type Config struct {
 	EmbedDim       int
 	EmbedBatchSize int
 	TopK           int
+	ChunkMaxChars  int
+	ChunkOverlap   int
+	ChunkMinChars  int
 	DocsDir        string
 	LogLevel       slog.Level
 }
@@ -54,6 +60,18 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	chunkMax, err := intEnv("CHUNK_MAX_CHARS", defaultChunkMaxChars)
+	if err != nil {
+		return Config{}, err
+	}
+	chunkOverlap, err := intEnv("CHUNK_OVERLAP_CHARS", defaultChunkOverlap)
+	if err != nil {
+		return Config{}, err
+	}
+	chunkMin, err := intEnv("CHUNK_MIN_CHARS", defaultChunkMinChars)
+	if err != nil {
+		return Config{}, err
+	}
 	level, err := parseLevel(env("LOG_LEVEL", defaultLogLevel))
 	if err != nil {
 		return Config{}, err
@@ -67,6 +85,9 @@ func Load() (Config, error) {
 		EmbedDim:       embedDim,
 		EmbedBatchSize: batchSize,
 		TopK:           topK,
+		ChunkMaxChars:  chunkMax,
+		ChunkOverlap:   chunkOverlap,
+		ChunkMinChars:  chunkMin,
 		DocsDir:        env("DOCS_DIR", defaultDocsDir),
 		LogLevel:       level,
 	}
@@ -92,6 +113,15 @@ func (c Config) validate() error {
 	}
 	if c.EmbedBatchSize <= 0 {
 		return fmt.Errorf("config: EMBED_BATCH_SIZE must be positive, got %d", c.EmbedBatchSize)
+	}
+	if c.ChunkMaxChars <= 0 {
+		return fmt.Errorf("config: CHUNK_MAX_CHARS must be positive, got %d", c.ChunkMaxChars)
+	}
+	if c.ChunkOverlap < 0 || c.ChunkOverlap >= c.ChunkMaxChars {
+		return fmt.Errorf("config: CHUNK_OVERLAP_CHARS must be between 0 and CHUNK_MAX_CHARS, got %d", c.ChunkOverlap)
+	}
+	if c.ChunkMinChars < 0 {
+		return fmt.Errorf("config: CHUNK_MIN_CHARS must not be negative, got %d", c.ChunkMinChars)
 	}
 	if c.TopK <= 0 {
 		return fmt.Errorf("config: TOP_K must be positive, got %d", c.TopK)

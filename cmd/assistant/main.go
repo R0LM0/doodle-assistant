@@ -19,6 +19,8 @@ import (
 	"github.com/r0lm0/doodle-assistant/internal/adapters/postgres"
 	"github.com/r0lm0/doodle-assistant/internal/app"
 	"github.com/r0lm0/doodle-assistant/internal/config"
+	"github.com/r0lm0/doodle-assistant/internal/domain"
+	"github.com/r0lm0/doodle-assistant/internal/eval"
 	"github.com/r0lm0/doodle-assistant/migrations"
 )
 
@@ -101,6 +103,11 @@ func run() int {
 	}
 
 	ingester, err := app.NewIngestDocs(loader, embedder, store, app.IngestConfig{
+		ChunkOptions: domain.ChunkOptions{
+			MaxChars:     cfg.ChunkMaxChars,
+			OverlapChars: cfg.ChunkOverlap,
+			MinChars:     cfg.ChunkMinChars,
+		},
 		EmbedBatchSize: cfg.EmbedBatchSize,
 		Logger:         logger,
 	})
@@ -109,14 +116,21 @@ func run() int {
 		return 1
 	}
 
+	evaluator, err := eval.NewRunner(embedder, store)
+	if err != nil {
+		logger.Error("build evaluator", "error", err)
+		return 1
+	}
+
 	cmd, err := cli.New(cli.Deps{
-		Migrator: migrator,
-		Ingester: ingester,
-		Asker:    asker,
-		Stats:    store,
-		Out:      os.Stdout,
-		Err:      os.Stderr,
-		Logger:   logger,
+		Migrator:  migrator,
+		Ingester:  ingester,
+		Asker:     asker,
+		Evaluator: evaluator,
+		Stats:     store,
+		Out:       os.Stdout,
+		Err:       os.Stderr,
+		Logger:    logger,
 	})
 	if err != nil {
 		logger.Error("build cli", "error", err)
