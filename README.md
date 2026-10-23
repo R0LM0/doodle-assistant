@@ -10,8 +10,8 @@ pgvector, no SDKs.
 | --- | --- | --- |
 | 0 | Setup: module, pgvector compose, preflight | done |
 | 1 | Ingestion: markdown chunking, embeddings, idempotent upsert | done |
-| 2 | Classic RAG: `Ask` with top-K + streaming answer | next |
-| 3 | Evaluation: recall@K dataset | pending |
+| 2 | Classic RAG: `Ask` with top-K + streaming answer | done |
+| 3 | Evaluation: recall@K dataset | next |
 | 4 | Tool calling on an in-memory canvas | pending |
 | 5 | Agentic RAG: `search_docs` as a tool + evidence judge | pending |
 | 6 | HTTP/SSE API + Vite/TS UI | pending |
@@ -62,6 +62,29 @@ evaluation dataset, not by intuition.
 
 The knowledge base is written in Spanish on purpose: it exercises the multilingual
 embedding model the project chose.
+
+## Asking (phase 2)
+
+```bash
+go run ./cmd/assistant ask "¿Se puede exportar un GIF con fondo transparente?"
+go run ./cmd/assistant ask -no-context "¿Se puede exportar un GIF con fondo transparente?"
+```
+
+The first run is RAG: embed the question, take the `TOP_K` closest chunks by cosine
+distance through the HNSW index, and answer only from a delimited context, citing
+`archivo.md > Encabezado`. The second is the control group: same model, same
+question, no retrieval. Comparing both is the point of the phase: without context
+the model answers about GIF in general; with context it answers about this app and
+cites where it read it.
+
+The context block is fenced and the system prompt states that context is data, not
+instructions: a document that contains "ignore the rules" is content to report, not
+an order to follow. Sources are printed from the retrieval result, not parsed out of
+the model text, so a model that forgets to cite cannot hide the evidence.
+
+Stage timings are printed for every answer (`embed`, `search`, `generate`). Expect
+`generate` to dominate: `gemma-4-e4b` has thinking enabled, so it reasons before the
+first visible token.
 
 ## Tests
 
