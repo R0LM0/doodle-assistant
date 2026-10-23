@@ -15,6 +15,7 @@ import (
 
 	"github.com/r0lm0/doodle-assistant/internal/adapters/cli"
 	"github.com/r0lm0/doodle-assistant/internal/adapters/filesystem"
+	"github.com/r0lm0/doodle-assistant/internal/adapters/memory"
 	"github.com/r0lm0/doodle-assistant/internal/adapters/ollama"
 	"github.com/r0lm0/doodle-assistant/internal/adapters/postgres"
 	"github.com/r0lm0/doodle-assistant/internal/app"
@@ -116,6 +117,27 @@ func run() int {
 		return 1
 	}
 
+	// The simulated canvas the agent can act on. Ids are stable so a prompt like
+	// "poné jiggle 6 en el crayon" works without listing first.
+	canvas := memory.NewCanvas(
+		domain.Layer{ID: "fondo", Name: "Fondo", Visible: true},
+		domain.Layer{ID: "line-art", Name: "Line art", Visible: true, Jiggle: 2, Speed: 12},
+		domain.Layer{ID: "crayon", Name: "Crayon", Visible: true, Jiggle: 3, Speed: 10},
+		domain.Layer{ID: "boceto", Name: "Boceto", Visible: false, Locked: true},
+	)
+
+	agentTools, err := app.NewCanvasTools(canvas)
+	if err != nil {
+		logger.Error("build canvas tools", "error", err)
+		return 1
+	}
+
+	agentRunner, err := app.NewRunAgent(chatModel, agentTools, app.RunAgentConfig{Logger: logger})
+	if err != nil {
+		logger.Error("build agent", "error", err)
+		return 1
+	}
+
 	evaluator, err := eval.NewRunner(embedder, store)
 	if err != nil {
 		logger.Error("build evaluator", "error", err)
@@ -127,6 +149,7 @@ func run() int {
 		Ingester:  ingester,
 		Asker:     asker,
 		Evaluator: evaluator,
+		Agent:     agentRunner,
 		Stats:     store,
 		Out:       os.Stdout,
 		Err:       os.Stderr,
