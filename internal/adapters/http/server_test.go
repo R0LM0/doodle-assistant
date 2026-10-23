@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -197,6 +199,37 @@ func TestAskFailureBecomesAnErrorEvent(t *testing.T) {
 	rec := doJSON(t, server.Handler(), http.MethodPost, "/api/ask", `{"question":"q"}`)
 	if !strings.Contains(rec.Body.String(), "event: error") {
 		t.Errorf("error stream = %s", rec.Body.String())
+	}
+}
+
+func TestStaticServesManifestWithItsOwnContentType(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<!doctype html>"), 0o644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "site.webmanifest"), []byte(`{"name":"x"}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	server, err := httpadapter.NewServer(httpadapter.Deps{WebDir: dir})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/site.webmanifest", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/manifest+json" {
+		t.Errorf("manifest content type = %q", ct)
+	}
+
+	// The SPA fallback still serves index.html for extension-less paths.
+	rec = httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/agente", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "doctype") {
+		t.Errorf("spa fallback = %d %q", rec.Code, rec.Body.String())
 	}
 }
 

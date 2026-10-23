@@ -246,6 +246,11 @@ func (s *Server) static() http.Handler {
 
 	fileServer := http.FileServer(http.Dir(dir))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Go has no MIME mapping for .webmanifest, and a manifest served as
+		// text/plain is ignored by browsers.
+		if strings.HasSuffix(r.URL.Path, ".webmanifest") {
+			w.Header().Set("Content-Type", "application/manifest+json")
+		}
 		if r.URL.Path == "/" || filepath.Ext(r.URL.Path) == "" {
 			index := filepath.Join(dir, "index.html")
 			if _, err := os.Stat(index); err != nil {

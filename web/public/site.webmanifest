@@ -1,0 +1,23 @@
+{
+  "name": "doodle-assistant",
+  "short_name": "doodle",
+  "description": "Asistente RAG y agente de herramientas para la app de dibujo animado.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdfdfc",
+  "theme_color": "#1b5fbf",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
