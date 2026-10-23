@@ -10,6 +10,7 @@ import (
 
 	"github.com/r0lm0/doodle-assistant/internal/adapters/cli"
 	"github.com/r0lm0/doodle-assistant/internal/app"
+	"github.com/r0lm0/doodle-assistant/internal/domain"
 	"github.com/r0lm0/doodle-assistant/internal/ports"
 )
 
@@ -145,5 +146,89 @@ func TestStatsAndHelp(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "ingest") {
 		t.Errorf("help output = %q", out.String())
+	}
+}
+
+type fakeAsker struct {
+	deltas       []string
+	result       app.AskResult
+	err          error
+	noContext    bool
+	lastQuestion string
+}
+
+func (f *fakeAsker) stream(emit func(string) error) error {
+	for _, delta := range f.deltas {
+		if err := emit(delta); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (f *fakeAsker) Ask(_ context.Context, question string, emit func(string) error) (app.AskResult, error) {
+	f.noContext = false
+	f.lastQuestion = question
+	return f.result, f.stream(emit)
+}
+
+func (f *fakeAsker) AskWithoutContext(_ context.Context, question string, emit func(string) error) (app.AskResult, error) {
+	f.noContext = true
+	f.lastQuestion = question
+	return f.result, f.stream(emit)
+}
+
+func TestAskStreamsAnswerAndPrintsSources(t *testing.T) {
+	asker := &fakeAsker{
+		deltas: []string{"El fondo ", "transparente solo en PNG y WebM."},
+		result: app.AskResult{
+			Answer: domain.Answer{
+				Question: "¿gif transparente?",
+				Text:     "El fondo transparente solo en PNG y WebM.",
+				Sources: []domain.Source{
+					{SourcePath: "export.md", HeadingPath: "Exportar > Fondo", Distance: 0.18},
+				},
+			},
+			Retrieved:    1,
+			GenerateTime: 900 * time.Millisecond,
+		},
+	}
+	c, out, _ := newCLI(t, cli.Deps{Asker: asker})
+
+	if code := c.Run(context.Background(), []string{"ask", "¿gif", "transparente?"}); code != 0 {
+		t.Fatalf("exit code = %d", code)
+	}
+
+	got := out.String()
+	for _, want := range []string{"El fondo transparente solo en PNG y WebM.", "export.md > Exportar > Fondo", "retrieved=1", "generate=900ms"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("stdout missing %q:\n%s", want, got)
+		}
+	}
+	if asker.lastQuestion != "¿gif transparente?" {
+		t.Errorf("question = %q (multi-word args must be joined)", asker.lastQuestion)
+	}
+	if asker.noContext {
+		t.Error("plain ask must use retrieval")
+	}
+}
+
+func TestAskRequiresAQuestionAndHonoursNoContext(t *testing.T) {
+	asker := &fakeAsker{}
+	c, _, errOut := newCLI(t, cli.Deps{Asker: asker})
+
+	if code := c.Run(context.Background(), []string{"ask"}); code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(errOut.String(), "missing question") {
+		t.Errorf("stderr = %q", errOut.String())
+	}
+
+	c, _, _ = newCLI(t, cli.Deps{Asker: asker})
+	if code := c.Run(context.Background(), []string{"ask", "-no-context", "pregunta"}); code != 0 {
+		t.Fatalf("exit code = %d", code)
+	}
+	if !asker.noContext {
+		t.Error("-no-context must use the control path")
 	}
 }

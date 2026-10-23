@@ -82,6 +82,24 @@ func run() int {
 		return 1
 	}
 
+	chatModel, err := ollama.NewChatModel(ollama.ChatConfig{
+		BaseURL: cfg.OllamaBaseURL,
+		Model:   cfg.ChatModel,
+	})
+	if err != nil {
+		logger.Error("build ollama chat model", "error", err)
+		return 1
+	}
+
+	asker, err := app.NewAsk(embedder, store, chatModel, app.AskConfig{
+		TopK:   cfg.TopK,
+		Logger: logger,
+	})
+	if err != nil {
+		logger.Error("build ask use case", "error", err)
+		return 1
+	}
+
 	ingester, err := app.NewIngestDocs(loader, embedder, store, app.IngestConfig{
 		EmbedBatchSize: cfg.EmbedBatchSize,
 		Logger:         logger,
@@ -94,6 +112,7 @@ func run() int {
 	cmd, err := cli.New(cli.Deps{
 		Migrator: migrator,
 		Ingester: ingester,
+		Asker:    asker,
 		Stats:    store,
 		Out:      os.Stdout,
 		Err:      os.Stderr,

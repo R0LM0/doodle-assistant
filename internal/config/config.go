@@ -20,6 +20,7 @@ const (
 	defaultEmbedModel     = "embeddinggemma"
 	defaultEmbedDim       = 768
 	defaultEmbedBatchSize = 32
+	defaultTopK           = 4
 	defaultDocsDir        = "docs"
 	defaultLogLevel       = "info"
 )
@@ -32,6 +33,7 @@ type Config struct {
 	EmbedModel     string
 	EmbedDim       int
 	EmbedBatchSize int
+	TopK           int
 	DocsDir        string
 	LogLevel       slog.Level
 }
@@ -48,6 +50,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	topK, err := intEnv("TOP_K", defaultTopK)
+	if err != nil {
+		return Config{}, err
+	}
 	level, err := parseLevel(env("LOG_LEVEL", defaultLogLevel))
 	if err != nil {
 		return Config{}, err
@@ -60,6 +66,7 @@ func Load() (Config, error) {
 		EmbedModel:     env("EMBED_MODEL", defaultEmbedModel),
 		EmbedDim:       embedDim,
 		EmbedBatchSize: batchSize,
+		TopK:           topK,
 		DocsDir:        env("DOCS_DIR", defaultDocsDir),
 		LogLevel:       level,
 	}
@@ -85,6 +92,9 @@ func (c Config) validate() error {
 	}
 	if c.EmbedBatchSize <= 0 {
 		return fmt.Errorf("config: EMBED_BATCH_SIZE must be positive, got %d", c.EmbedBatchSize)
+	}
+	if c.TopK <= 0 {
+		return fmt.Errorf("config: TOP_K must be positive, got %d", c.TopK)
 	}
 	return nil
 }
