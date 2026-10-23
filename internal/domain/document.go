@@ -59,3 +59,12 @@ func NormalizeContent(content string) string {
 	}
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
+
+// IngestHash is the idempotency key of ingestion: content plus the chunking
+// configuration that produced the chunks.
+//
+// Hashing the content alone would be a silent trap: changing the chunk size would
+// look like "nothing changed" and the index would keep the old chunks forever.
+func IngestHash(content string, opts ChunkOptions) string {
+	return ContentHash(content + "\n#chunking:" + opts.Signature())
+}

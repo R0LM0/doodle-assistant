@@ -28,3 +28,42 @@ func TestContentHashOfEmptyIsDefined(t *testing.T) {
 		t.Error("empty content must still produce a hash")
 	}
 }
+
+func TestIngestHashIncludesChunkingOptions(t *testing.T) {
+	content := "# A\n\ntexto de prueba\n"
+	base := ChunkOptions{MaxChars: 1200, OverlapChars: 150, MinChars: 200}
+
+	if IngestHash(content, base) != IngestHash(content, base) {
+		t.Error("the ingest hash must be stable for the same content and options")
+	}
+
+	smaller := base
+	smaller.MaxChars = 600
+	if IngestHash(content, base) == IngestHash(content, smaller) {
+		t.Error("changing the chunk size must change the ingest hash, otherwise re-chunking is skipped forever")
+	}
+
+	moreOverlap := base
+	moreOverlap.OverlapChars = 300
+	if IngestHash(content, base) == IngestHash(content, moreOverlap) {
+		t.Error("changing the overlap must change the ingest hash")
+	}
+
+	if IngestHash(content, base) == IngestHash("# A\n\notro texto\n", base) {
+		t.Error("different content must produce a different ingest hash")
+	}
+}
+
+func TestChunkOptionsSignatureIsStableAndOrdered(t *testing.T) {
+	opts := ChunkOptions{MaxChars: 1200, OverlapChars: 150, MinChars: 200}
+
+	if opts.Signature() == "" {
+		t.Fatal("signature must not be empty")
+	}
+	if opts.Signature() != (ChunkOptions{MaxChars: 1200, OverlapChars: 150, MinChars: 200}).Signature() {
+		t.Error("signature must be stable for equal options")
+	}
+	if opts.Signature() == (ChunkOptions{MaxChars: 600, OverlapChars: 150, MinChars: 200}).Signature() {
+		t.Error("signature must differ when a value differs")
+	}
+}

@@ -110,7 +110,9 @@ func (uc *IngestDocs) Ingest(ctx context.Context) (IngestStats, error) {
 }
 
 func (uc *IngestDocs) ingestDocument(ctx context.Context, doc domain.Document, stats *IngestStats) error {
-	doc.ContentHash = domain.ContentHash(doc.Content)
+	// The hash covers content *and* chunking options: changing the chunk size
+	// must rebuild the index instead of looking like an unchanged document.
+	doc.ContentHash = domain.IngestHash(doc.Content, uc.chunkOptions)
 
 	existingHash, found, err := uc.store.DocumentHash(ctx, doc.SourcePath)
 	if err != nil {

@@ -65,8 +65,8 @@ func TestIngestIndexesNewDocument(t *testing.T) {
 	if !ok {
 		t.Fatal("document not stored")
 	}
-	if doc.ContentHash != domain.ContentHash(exportMD) {
-		t.Errorf("stored hash = %q, want the content hash", doc.ContentHash)
+	if want := domain.IngestHash(exportMD, testConfig(32).ChunkOptions); doc.ContentHash != want {
+		t.Errorf("stored hash = %q, want the content+chunking hash %q", doc.ContentHash, want)
 	}
 	for i, chunk := range doc.Chunks {
 		if len(chunk.Embedding) != 8 {
@@ -263,4 +263,36 @@ func (f *fakeLoader) Load(ctx context.Context) ([]domain.Document, error) {
 		return nil, f.err
 	}
 	return f.docs, nil
+}
+
+func TestIngestReindexesWhenChunkOptionsChange(t *testing.T) {
+	loader := &fakeLoader{docs: []domain.Document{{SourcePath: "docs/export.md", Title: "Exportar", Content: exportMD}}}
+	emb := memory.NewEmbedder(8)
+	store := memory.NewVectorStore()
+
+	first := mustIngest(t, loader, emb, store, testConfig(32))
+	firstStats, err := first.Ingest(context.Background())
+	if err != nil {
+		t.Fatalf("first Ingest: %v", err)
+	}
+
+	// Same content, different chunk size: the index must be rebuilt, not skipped.
+	finer := mustIngest(t, loader, emb, store, app.IngestConfig{
+		ChunkOptions:   domain.ChunkOptions{MaxChars: 40, OverlapChars: 0, MinChars: 0},
+		EmbedBatchSize: 32,
+	})
+	secondStats, err := finer.Ingest(context.Background())
+	if err != nil {
+		t.Fatalf("second Ingest: %v", err)
+	}
+
+	if secondStats.Indexed != 1 || secondStats.Skipped != 0 {
+		t.Fatalf("stats = %+v, want the document re-indexed", secondStats)
+	}
+	if secondStats.Chunks <= firstStats.Chunks {
+		t.Errorf("chunks did not change with a smaller max size: %d -> %d", firstStats.Chunks, secondStats.Chunks)
+	}
+	if emb.CallCount() < 2 {
+		t.Errorf("embed calls = %d, want a second embedding pass", emb.CallCount())
+	}
 }

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -300,4 +301,10 @@ func overlapSeed(previous string, overlap int) string {
 		return ""
 	}
 	return seed
+}
+
+// Signature is a stable, human-readable identity of the chunking configuration.
+// It feeds IngestHash and is safe to log: it contains no document content.
+func (o ChunkOptions) Signature() string {
+	return fmt.Sprintf("max=%d,overlap=%d,min=%d", o.MaxChars, o.OverlapChars, o.MinChars)
 }
