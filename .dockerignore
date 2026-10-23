@@ -1,0 +1,8 @@
+.git
+.atl
+web/node_modules
+web/dist
+bin
+*.exe
+*.test
+.env

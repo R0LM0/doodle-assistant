@@ -1,0 +1,6 @@
+# Normalize line endings: a Windows checkout must not break Docker or shell scripts.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.webp binary

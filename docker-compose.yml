@@ -23,6 +23,30 @@ services:
       retries: 20
       start_period: 5s
 
+  app:
+    build: .
+    container_name: doodle-assistant
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Inside the compose network the database host is the service name.
+      DATABASE_URL: postgres://${POSTGRES_USER:-doodle}:${POSTGRES_PASSWORD:-doodle}@postgres:5432/${POSTGRES_DB:-doodle}?sslmode=disable
+      # Ollama runs natively on the host; Docker Desktop exposes it this way.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL_HOST:-http://host.docker.internal:11434}
+      CHAT_MODEL: ${CHAT_MODEL:-gemma-4-e4b}
+      EMBED_MODEL: ${EMBED_MODEL:-embeddinggemma}
+      EMBED_DIM: ${EMBED_DIM:-768}
+      HTTP_ADDR: :8080
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "/app/assistant", "help"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 volumes:
   pgdata:
     name: doodle-pgdata
