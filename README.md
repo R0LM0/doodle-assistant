@@ -13,9 +13,9 @@ pgvector, no SDKs.
 | 2 | Classic RAG: `Ask` with top-K + streaming answer | done |
 | 3 | Evaluation: recall@K dataset | done |
 | 4 | Tool calling on an in-memory canvas | done |
-| 5 | Agentic RAG: `search_docs` as a tool + evidence judge | next |
-| 6 | HTTP/SSE API + Vite/TS UI | pending |
-| 7 | Optional: Docker image + Neon | pending |
+| 5 | Agentic RAG: `search_docs` as a tool + evidence judge | done |
+| 6 | HTTP/SSE API + Vite/TS UI | done |
+| 7 | Optional: Docker image + Neon | done |
 
 ## Prerequisites
 
@@ -156,6 +156,82 @@ reach code), arguments are strictly decoded, ranges are validated by the domain 
 the model ignores the schema, a failing tool becomes an error result the model can react
 to instead of killing the run, and the loop is bounded. Tool output is data, never
 instructions.
+
+## Agentic RAG (phase 5)
+
+```bash
+go run ./cmd/assistant ask -agentic "¿Qué limitación tiene exportar a GIF con fondo transparente?"
+go run ./cmd/assistant eval -agentic -k 1,3,5,8 -verbose
+go run ./cmd/assistant agent "¿Cuál es el tope de exportación? Después poné el crayon en jiggle 8."
+```
+
+Two additions to the classic pipeline:
+
+1. `search_docs` is a tool, so the agent decides when to search. One real run used
+   `list_layers`, then `search_docs`, then `set_wiggle`: it answered a documentation
+   question and performed a canvas action in the same loop.
+2. `EvidenceJudge` asks the model, in a separate call without tools, whether the
+   retrieved fragments suffice. When they do not, `Reformulate` produces a better query
+   and the search repeats (2 attempts by default, hard cap 4).
+
+Retrieval quality on the same 15-question dataset:
+
+| retriever | recall@1 | recall@3 | MRR |
+| --- | --- | --- | --- |
+| single shot (phase 2) | 0.867 | 1.000 | 0.933 |
+| agentic (judge + reformulate) | 0.933 | 1.000 | 0.967 |
+
+The gain is real but small and costs extra model calls: on this corpus the judge says
+"enough" on the first attempt most of the time, so agentic retrieval mostly pays twice
+for the same answer. The honest conclusion is that judge + reformulation earns its keep
+when retrieval fails, and here it rarely does.
+
+## HTTP API and UI (phase 6)
+
+```bash
+cd web && npm install && npm run build && cd ..
+go run ./cmd/assistant serve          # http://localhost:8080
+```
+
+| endpoint | behaviour |
+| --- | --- |
+| `GET /api/health` | liveness |
+| `GET /api/stats` | documents and chunks indexed |
+| `POST /api/ask` | SSE stream: `delta`, `sources`, `done`, plus `agentic` metadata |
+| `POST /api/agent` | SSE stream: `delta`, `tools`, `done` |
+
+SSE is used because the answer is generated token by token and the user should see it;
+`EventSource` cannot POST a JSON body, so the UI reads the stream from `fetch()` and
+parses the `event:`/`data:` blocks itself. Once the headers are sent an error becomes an
+`event: error` instead of an HTTP status.
+
+The UI is Vite + TypeScript with no framework: a form with mode selector, a live region
+for the streamed answer, sources as buttons that expand the exact fragment used (so a
+citation is verifiable, not decorative), tool traces for the agent, visible focus rings,
+a skip link, `aria-busy` while streaming, a cancel button and Ctrl+Enter to submit.
+
+## Deployment (phase 7)
+
+```bash
+docker build -t doodle-assistant:local .
+docker compose up -d --build                    # postgres + app
+docker compose run --rm app migrate             # schema first
+docker compose run --rm app ingest              # index the docs
+```
+
+The image is multi-stage: Node builds the UI, Go builds a static binary, and the runtime
+is `distroless/static:nonroot` — no shell, no package manager, non-root by default.
+
+Moving to Neon is a `DATABASE_URL` change; Neon's free plan includes pgvector, 1 GB of
+storage and 100 CU-hours per project, with compute scaling to zero after 5 minutes.
+
+Free hosting is the awkward part of this project, and not for the reason it looks: the
+assistant calls **Ollama's HTTP API** for chat and embeddings, so a sleeping free dyno
+with a local Ollama is useless. Either the embedding at ingest time already ran (vectors
+live in the database) and only chat goes remote, or `OLLAMA_BASE_URL` must point to a
+hosted endpoint — which also needs an auth header this adapter does not send yet. What
+was verified today: Render free sleeps, Koyeb scales to zero, Railway gives a $1 credit,
+Fly.io is trial-only; verify before choosing, those terms move.
 
 ## Tests
 
