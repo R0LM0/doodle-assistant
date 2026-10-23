@@ -11,8 +11,8 @@ pgvector, no SDKs.
 | 0 | Setup: module, pgvector compose, preflight | done |
 | 1 | Ingestion: markdown chunking, embeddings, idempotent upsert | done |
 | 2 | Classic RAG: `Ask` with top-K + streaming answer | done |
-| 3 | Evaluation: recall@K dataset | next |
-| 4 | Tool calling on an in-memory canvas | pending |
+| 3 | Evaluation: recall@K dataset | done |
+| 4 | Tool calling on an in-memory canvas | next |
 | 5 | Agentic RAG: `search_docs` as a tool + evidence judge | pending |
 | 6 | HTTP/SSE API + Vite/TS UI | pending |
 | 7 | Optional: Docker image + Neon | pending |
@@ -85,6 +85,44 @@ the model text, so a model that forgets to cite cannot hide the evidence.
 Stage timings are printed for every answer (`embed`, `search`, `generate`). Expect
 `generate` to dominate: `gemma-4-e4b` has thinking enabled, so it reasons before the
 first visible token.
+
+## Evaluation (phase 3)
+
+```bash
+# current index
+go run ./cmd/assistant eval -k 1,3,5,8 -verbose
+
+# re-index with another chunk size, then measure
+CHUNK_MAX_CHARS=600 CHUNK_OVERLAP_CHARS=60 CHUNK_MIN_CHARS=100 \
+  go run ./cmd/assistant ingest
+go run ./cmd/assistant eval -k 1,3,5,8
+```
+
+`eval/questions.json` holds 15 questions, each naming the expected document, an
+expected heading and a distinctive phrase. A retrieved chunk counts as relevant when
+the document matches and either the heading or the phrase matches: chunking options
+that merge a small section into its neighbour keep the evidence and lose the heading,
+and the metric must not punish that.
+
+First measurement (heading-only relevance) reported `recall@1..8 = 0.400` for
+`CHUNK_MAX_CHARS=2400`, with the same value for every K. A recall that does not move
+with K means the evidence never appears under the expected label, not that ranking is
+bad: the merged chunks were still there. With the content fallback, the same index
+scores `recall@3 = 1.000`.
+
+Current results (`embeddinggemma`, 8 documents):
+
+| chunk max / overlap / min | chunks | recall@1 | recall@3 | recall@8 | MRR |
+| --- | --- | --- | --- | --- | --- |
+| 600 / 60 / 100 | 39 | 0.867 | 1.000 | 1.000 | 0.933 |
+| 1200 / 150 / 200 | 33 | 0.867 | 1.000 | 1.000 | 0.933 |
+| 2400 / 240 / 400 | 14 | 0.867 | 1.000 | 1.000 | 0.933 |
+
+The metric saturates at this corpus size: 14 to 39 chunks and K=8 means most of the
+index is returned, so every configuration looks perfect. Two questions sit at rank 2
+(`q04`, `q12`) and nothing worse. To discriminate chunk sizes, the corpus has to grow
+(or the primary metric has to be recall@1 + MRR). Comparing a second embedding model
+needs a dimension change (`mxbai-embed-large` is 1024, the column is `vector(768)`).
 
 ## Tests
 
