@@ -9,8 +9,8 @@ pgvector, no SDKs.
 | Phase | Scope | State |
 | --- | --- | --- |
 | 0 | Setup: module, pgvector compose, preflight | done |
-| 1 | Ingestion: markdown chunking, embeddings, idempotent upsert | next |
-| 2 | Classic RAG: `Ask` with top-K + streaming answer | pending |
+| 1 | Ingestion: markdown chunking, embeddings, idempotent upsert | done |
+| 2 | Classic RAG: `Ask` with top-K + streaming answer | next |
 | 3 | Evaluation: recall@K dataset | pending |
 | 4 | Tool calling on an in-memory canvas | pending |
 | 5 | Agentic RAG: `search_docs` as a tool + evidence judge | pending |
@@ -37,7 +37,46 @@ docker compose up -d
 
 # 2. Preflight: container health, pgvector, Ollama, models, embedding dim
 scripts/healthcheck.sh
+
+# 3. Apply migrations, index the knowledge base, inspect the result
+go run ./cmd/assistant migrate
+go run ./cmd/assistant ingest
+go run ./cmd/assistant stats
 ```
+
+## Ingestion (phase 1)
+
+`ingest` walks `DOCS_DIR` (default `docs`), cuts every markdown file at heading
+boundaries, embeds the chunks in batches and stores them in one transaction per
+document.
+
+Idempotency comes from `documents.content_hash`: when a file's normalized content
+is unchanged it costs one indexed `SELECT`, no chunking and no embedding calls.
+Re-running `ingest` on an unchanged tree reports
+`scanned=8 skipped=8 indexed=0 chunks=0 embed_calls=0`.
+
+Tunables: `EMBED_BATCH_SIZE` (default 32) and `EMBED_DIM`, which must match
+`vector(N)` in the migration. Chunk defaults live in `domain.DefaultChunkOptions`
+(1200 chars max, 150 overlap, 200 min) and are tuned in phase 3 against the
+evaluation dataset, not by intuition.
+
+The knowledge base is written in Spanish on purpose: it exercises the multilingual
+embedding model the project chose.
+
+## Tests
+
+```bash
+go test ./...                     # unit tests: no network, no database
+go test -race ./...               # same, with the race detector
+go vet ./...
+
+# integration: needs the compose container up
+DATABASE_URL='postgres://doodle:doodle@localhost:5434/doodle?sslmode=disable' \
+  go test -tags integration ./internal/adapters/postgres/
+```
+
+`internal/archtest` fails the build if `domain`, `app` or `ports` ever import an
+adapter.
 
 ## Environment variables
 
@@ -66,13 +105,13 @@ there, so no code path depends on the local container.
 
 ```
 cmd/assistant/          composition root (the only place that knows adapters)
-internal/domain/        Document, Chunk, Answer, Source, Canvas, Layer - no deps
-internal/app/           use cases: IngestDocs, Ask, RunAgent
-internal/ports/         Embedder, VectorStore, ChatModel, CanvasRepository, Tool
-internal/adapters/      ollama, postgres, memory, http, cli
-docs/                   knowledge base markdown
-migrations/             versioned SQL (see migrations/README.md)
-eval/                   retrieval evaluation dataset
+internal/domain/        Document, Chunk, chunker, content hash - stdlib only
+internal/app/           use cases: IngestDocs (Ask, RunAgent next)
+internal/ports/         Embedder, VectorStore, DocumentLoader
+internal/adapters/      ollama, postgres, filesystem, memory, cli (http in phase 6)
+docs/                   knowledge base markdown (Spanish)
+migrations/             versioned SQL, embedded in the binary
+ eval/                   retrieval evaluation dataset
 scripts/                preflight / helpers
 ```
 
