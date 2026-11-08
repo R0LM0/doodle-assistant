@@ -84,7 +84,7 @@ func (uc *Ask) Ask(ctx context.Context, question string, emit func(delta string)
 	result.EmbedTime = time.Since(embedStart)
 
 	searchStart := time.Now()
-	hits, err := uc.store.Search(ctx, vectors[0], uc.topK)
+	hits, err := uc.store.Search(ctx, ports.SearchRequest{Query: question, Embedding: vectors[0], Limit: uc.topK, Mode: ports.SearchModeVector})
 	if err != nil {
 		return result, fmt.Errorf("ask: search chunks: %w", err)
 	}
@@ -98,7 +98,7 @@ func (uc *Ask) Ask(ctx context.Context, question string, emit func(delta string)
 			Title:       hit.Title,
 			HeadingPath: hit.HeadingPath,
 			Position:    hit.Position,
-			Distance:    hit.Distance,
+			Score:       hit.Score,
 			Content:     hit.Content,
 		}
 	}

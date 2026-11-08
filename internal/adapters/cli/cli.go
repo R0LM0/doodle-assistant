@@ -266,7 +266,7 @@ func (c *CLI) ask(ctx context.Context, args []string) int {
 	if len(result.Answer.Sources) > 0 {
 		fmt.Fprintln(c.deps.Out, "---\nfuentes:")
 		for i, source := range result.Answer.Sources {
-			fmt.Fprintf(c.deps.Out, "  [%d] %.4f  %s\n", i+1, source.Distance, source.Citation())
+			fmt.Fprintf(c.deps.Out, "  [%d] %.4f  %s\n", i+1, source.Score, source.Citation())
 		}
 	}
 	fmt.Fprintf(c.deps.Out, "tiempos: embed=%s search=%s generate=%s retrieved=%d\n",

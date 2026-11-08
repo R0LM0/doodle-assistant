@@ -66,13 +66,13 @@ func (t searchDocsTool) Execute(ctx context.Context, args json.RawMessage) (stri
 		Source  string  `json:"source"`
 		Heading string  `json:"heading"`
 		Text    string  `json:"text"`
-		Dist    float64 `json:"distance"`
+		Score   float64 `json:"score"`
 	}
 	out := struct {
 		Hits []fragment `json:"hits"`
 	}{Hits: make([]fragment, len(hits))}
 	for i, hit := range hits {
-		out.Hits[i] = fragment{Source: hit.SourcePath, Heading: hit.HeadingPath, Text: hit.Content, Dist: hit.Distance}
+		out.Hits[i] = fragment{Source: hit.SourcePath, Heading: hit.HeadingPath, Text: hit.Content, Score: hit.Score}
 	}
 	return toJSON(out)
 }
@@ -86,7 +86,7 @@ func searchHits(ctx context.Context, embedder ports.Embedder, store ports.Vector
 	if len(vectors) != 1 || len(vectors[0]) == 0 {
 		return nil, fmt.Errorf("embedder returned %d vectors for one query", len(vectors))
 	}
-	hits, err := store.Search(ctx, vectors[0], topK)
+	hits, err := store.Search(ctx, ports.SearchRequest{Query: query, Embedding: vectors[0], Limit: topK, Mode: ports.SearchModeVector})
 	if err != nil {
 		return nil, fmt.Errorf("search chunks: %w", err)
 	}

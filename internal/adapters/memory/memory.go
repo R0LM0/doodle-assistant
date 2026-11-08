@@ -175,41 +175,116 @@ func (s *VectorStore) Stats(ctx context.Context) (ports.StoreStats, error) {
 	return stats, nil
 }
 
-// Search ranks every stored chunk by cosine distance, brute force. The fake is for
-// tests, not for scale: it exists to prove the use case wires retrieval correctly.
-func (s *VectorStore) Search(ctx context.Context, embedding []float32, limit int) ([]ports.SearchHit, error) {
-	if len(embedding) == 0 {
+// Search ranks every stored chunk according to req.Mode (empty means vector),
+// brute force. The fake is for tests, not for scale: it exists to prove the use
+// case wires retrieval correctly.
+func (s *VectorStore) Search(ctx context.Context, req ports.SearchRequest) ([]ports.SearchHit, error) {
+	if len(req.Embedding) == 0 {
 		return nil, errors.New("memory store: search embedding is empty")
 	}
-	if limit <= 0 {
-		return nil, fmt.Errorf("memory store: search limit must be positive, got %d", limit)
+	if req.Limit <= 0 {
+		return nil, fmt.Errorf("memory store: search limit must be positive, got %d", req.Limit)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
+	mode := req.Mode
+	if mode == "" {
+		mode = ports.SearchModeVector
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	hits := make([]ports.SearchHit, 0, len(s.docs))
+	type scored struct {
+		hit     ports.SearchHit
+		vecRank int
+		lexRank int
+	}
+	all := make([]scored, 0, len(s.docs))
 	for _, doc := range s.docs {
 		for _, chunk := range doc.Chunks {
-			hits = append(hits, ports.SearchHit{
+			all = append(all, scored{hit: ports.SearchHit{
 				SourcePath:  doc.SourcePath,
 				Title:       doc.Title,
 				HeadingPath: chunk.HeadingPath,
 				Position:    chunk.Position,
 				Content:     chunk.Content,
-				Distance:    cosineDistance(embedding, chunk.Embedding),
-			})
+				Score:       cosineSimilarity(req.Embedding, chunk.Embedding),
+			}})
 		}
 	}
 
-	sort.SliceStable(hits, func(i, j int) bool { return hits[i].Distance < hits[j].Distance })
-	if len(hits) > limit {
-		hits = hits[:limit]
+	switch mode {
+	case ports.SearchModeVector:
+		sort.SliceStable(all, func(i, j int) bool { return all[i].hit.Score > all[j].hit.Score })
+	case ports.SearchModeLexical:
+		for i := range all {
+			all[i].hit.Score = lexicalScore(req.Query, all[i].hit.Content+" "+all[i].hit.HeadingPath)
+		}
+		sort.SliceStable(all, func(i, j int) bool { return all[i].hit.Score > all[j].hit.Score })
+	case ports.SearchModeHybrid:
+		const rrfK = 60.0
+		byVec := append([]scored(nil), all...)
+		sort.SliceStable(byVec, func(i, j int) bool { return byVec[i].hit.Score > byVec[j].hit.Score })
+		vecRank := make(map[string]int, len(byVec))
+		for i, sc := range byVec {
+			vecRank[rankKey(sc.hit)] = i + 1
+		}
+		byLex := append([]scored(nil), all...)
+		for i := range byLex {
+			byLex[i].hit.Score = lexicalScore(req.Query, byLex[i].hit.Content+" "+byLex[i].hit.HeadingPath)
+		}
+		sort.SliceStable(byLex, func(i, j int) bool { return byLex[i].hit.Score > byLex[j].hit.Score })
+		lexRank := make(map[string]int, len(byLex))
+		for i, sc := range byLex {
+			lexRank[rankKey(sc.hit)] = i + 1
+		}
+		for i := range all {
+			key := rankKey(all[i].hit)
+			all[i].hit.Score = 1.0/(rrfK+float64(vecRank[key])) + 1.0/(rrfK+float64(lexRank[key]))
+		}
+		sort.SliceStable(all, func(i, j int) bool { return all[i].hit.Score > all[j].hit.Score })
+	default:
+		return nil, fmt.Errorf("memory store: unknown search mode %q", string(mode))
+	}
+
+	hits := make([]ports.SearchHit, 0, len(all))
+	for _, sc := range all {
+		hits = append(hits, sc.hit)
+	}
+	if len(hits) > req.Limit {
+		hits = hits[:req.Limit]
 	}
 	return hits, nil
+}
+
+func rankKey(h ports.SearchHit) string {
+	return h.SourcePath + "\x00" + h.HeadingPath + "\x00" + fmt.Sprint(h.Position)
+}
+
+func lexicalScore(query, text string) float64 {
+	terms := strings.Fields(strings.ToLower(query))
+	if len(terms) == 0 {
+		return 0
+	}
+	lower := strings.ToLower(text)
+	matched := 0
+	for _, term := range terms {
+		term = strings.Trim(term, "\"'(),.;:!?")
+		if term == "" {
+			continue
+		}
+		if strings.Contains(lower, term) {
+			matched++
+		}
+	}
+	return float64(matched) / float64(len(terms))
+}
+
+func cosineSimilarity(a, b []float32) float64 {
+	return 1 - cosineDistance(a, b)
 }
 
 func cosineDistance(a, b []float32) float64 {

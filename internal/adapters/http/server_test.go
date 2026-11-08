@@ -28,7 +28,7 @@ func (f fakeAsker) Ask(_ context.Context, question string, emit func(string) err
 		}
 	}
 	return app.AskResult{
-		Answer: domain.Answer{Question: question, Sources: []domain.Source{{SourcePath: "export.md", HeadingPath: "Exportar > Escala", Distance: 0.2, Content: "tope 1920x1080"}}},
+		Answer: domain.Answer{Question: question, Sources: []domain.Source{{SourcePath: "export.md", HeadingPath: "Exportar > Escala", Score: 0.8, Content: "tope 1920x1080"}}},
 	}, nil
 }
 

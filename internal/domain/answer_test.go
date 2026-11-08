@@ -7,8 +7,8 @@ import (
 
 func testSources() []Source {
 	return []Source{
-		{SourcePath: "export.md", Title: "Exportar", HeadingPath: "Exportar > Escala", Distance: 0.12, Content: "La escala va de 1x a 2x."},
-		{SourcePath: "layers.md", Title: "Capas", HeadingPath: "Capas > Operaciones", Distance: 0.28, Content: "Duplicar copia la capa completa."},
+		{SourcePath: "export.md", Title: "Exportar", HeadingPath: "Exportar > Escala", Score: 0.88, Content: "La escala va de 1x a 2x."},
+		{SourcePath: "layers.md", Title: "Capas", HeadingPath: "Capas > Operaciones", Score: 0.72, Content: "Duplicar copia la capa completa."},
 	}
 }
 

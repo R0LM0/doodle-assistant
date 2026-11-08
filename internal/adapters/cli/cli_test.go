@@ -187,7 +187,7 @@ func TestAskStreamsAnswerAndPrintsSources(t *testing.T) {
 				Question: "¿gif transparente?",
 				Text:     "El fondo transparente solo en PNG y WebM.",
 				Sources: []domain.Source{
-					{SourcePath: "export.md", HeadingPath: "Exportar > Fondo", Distance: 0.18},
+					{SourcePath: "export.md", HeadingPath: "Exportar > Fondo", Score: 0.82},
 				},
 			},
 			Retrieved:    1,

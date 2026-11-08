@@ -108,7 +108,7 @@ func (uc *AgenticAsk) Ask(ctx context.Context, question string, emit func(delta 
 			Title:       hit.Title,
 			HeadingPath: hit.HeadingPath,
 			Position:    hit.Position,
-			Distance:    hit.Distance,
+			Score:       hit.Score,
 			Content:     hit.Content,
 		}
 	}

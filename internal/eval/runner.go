@@ -113,7 +113,7 @@ func (r *Runner) retrieve(ctx context.Context, questions []Question, topK int) (
 
 	results := make([]Retrieved, len(questions))
 	for i, question := range questions {
-		hits, err := r.store.Search(ctx, vectors[i], topK)
+		hits, err := r.store.Search(ctx, ports.SearchRequest{Query: question.Question, Embedding: vectors[i], Limit: topK, Mode: ports.SearchModeVector})
 		if err != nil {
 			return nil, fmt.Errorf("eval: search for %s: %w", question.ID, err)
 		}

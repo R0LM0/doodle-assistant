@@ -7,7 +7,7 @@
 type Source = {
   source_path: string;
   heading_path: string;
-  distance: number;
+  score: number;
   content: string;
 };
 
@@ -127,7 +127,7 @@ function renderSources(list: Source[]): void {
     button.type = "button";
     button.className = "source";
     button.setAttribute("aria-expanded", "false");
-    button.textContent = `${index + 1}. ${source.source_path} > ${source.heading_path} (${source.distance.toFixed(3)})`;
+    button.textContent = `${index + 1}. ${source.source_path} > ${source.heading_path} (${source.score.toFixed(3)})`;
 
     const fragment = document.createElement("pre");
     fragment.hidden = true;

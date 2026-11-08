@@ -10,6 +10,7 @@ import (
 
 	"github.com/r0lm0/doodle-assistant/internal/adapters/postgres"
 	"github.com/r0lm0/doodle-assistant/internal/domain"
+	"github.com/r0lm0/doodle-assistant/internal/ports"
 )
 
 // direction builds a one-hot vector: searching with it should rank that chunk first.
@@ -19,7 +20,7 @@ func direction(dim, index int) []float32 {
 	return v
 }
 
-func TestSearchRanksByCosineDistance(t *testing.T) {
+func TestSearchRanksByCosineSimilarity(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 
@@ -46,7 +47,7 @@ func TestSearchRanksByCosineDistance(t *testing.T) {
 		t.Fatalf("SaveDocument: %v", err)
 	}
 
-	hits, err := store.Search(ctx, direction(768, 0), 2)
+	hits, err := store.Search(ctx, ports.SearchRequest{Query: "tope escala", Embedding: direction(768, 0), Limit: 2, Mode: ports.SearchModeVector})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
@@ -59,14 +60,14 @@ func TestSearchRanksByCosineDistance(t *testing.T) {
 	if hits[0].SourcePath != sourcePath || hits[0].Title != "Busqueda" {
 		t.Errorf("provenance missing: %+v", hits[0])
 	}
-	if hits[0].Distance > hits[1].Distance {
-		t.Errorf("hits are not sorted by distance: %v then %v", hits[0].Distance, hits[1].Distance)
+	if hits[0].Score < hits[1].Score {
+		t.Errorf("hits are not sorted by score: %v then %v", hits[0].Score, hits[1].Score)
 	}
 	if hits[1].Content == "" {
 		t.Error("chunk content not returned")
 	}
 
-	limited, err := store.Search(ctx, direction(768, 1), 1)
+	limited, err := store.Search(ctx, ports.SearchRequest{Query: "fondo", Embedding: direction(768, 1), Limit: 1, Mode: ports.SearchModeVector})
 	if err != nil {
 		t.Fatalf("Search with limit 1: %v", err)
 	}
@@ -74,10 +75,10 @@ func TestSearchRanksByCosineDistance(t *testing.T) {
 		t.Errorf("limit not honoured: %+v", limited)
 	}
 
-	if _, err := store.Search(ctx, direction(768, 0), 0); err == nil {
+	if _, err := store.Search(ctx, ports.SearchRequest{Query: "x", Embedding: direction(768, 0), Limit: 0}); err == nil {
 		t.Error("expected an error for limit 0")
 	}
-	if _, err := store.Search(ctx, nil, 3); err == nil {
+	if _, err := store.Search(ctx, ports.SearchRequest{Query: "x", Limit: 3}); err == nil {
 		t.Error("expected an error for an empty embedding")
 	}
 }
