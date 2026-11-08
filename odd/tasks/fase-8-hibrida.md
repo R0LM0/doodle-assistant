@@ -16,7 +16,7 @@ Feature branch sugerida: `feat/fase-8-hibrida`. Plan base: `.zcode/plans/plan-se
 - T3 (S3,S4, route: inline, commit: feat(config,eval): SEARCH_MODE y RRF_K, flag -mode en eval — c6319ec)
 - T4 (S3,S4, route: inline, commit: feat(app): judge retry switches source — f7168a6)
 - T5 (S3,S4, route: inline, commit: feat(docs): corpus fase 8 (+8 docs, +12 preguntas) — 4b409a5; fix previo 216d38c)
-- T6 (S1,S2,S3,S4, route: inline, commit: docs: fase 8 en README)
+- T6 (S1,S2,S3,S4, route: inline, commit: docs: fase 8 en README — 4894f04; fix RRFK 75b35b6)
 
 ## Log
 
@@ -30,3 +30,4 @@ Feature branch sugerida: `feat/fase-8-hibrida`. Plan base: `.zcode/plans/plan-se
 - L8: T4 hecho en f7168a6. Verificado: 6 tests agentic incl. switch-source. Slice: 4 commits/775 acumuladas, cada commit <400.
 - L9: fix FTS heading en 216d38c (lexical r1 0.185->0.222, hybrid r1 0.852->0.889). T5 hecho en 4b409a5: 16 docs, 41 chunks. Slice: 6 commits/968 acumuladas, cada commit <300.
 - L10: T6 cierra la feature: tabla 27q (vector/hybrid/agentic 0.889, lexical 0.222), default vector sin cambios por empate.
+- L11: fix 75b35b6 (resto de T3: hybrid honra Store.RRFK). Feature completa: 8 commits, cada uno <300 líneas.
