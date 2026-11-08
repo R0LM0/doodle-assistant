@@ -16,6 +16,7 @@ pgvector, no SDKs.
 | 5 | Agentic RAG: `search_docs` as a tool + evidence judge | done |
 | 6 | HTTP/SSE API + Vite/TS UI | done |
 | 7 | Optional: Docker image + Neon | done |
+| 8 | Hybrid retrieval: vector + FTS with RRF, switch-source, extended corpus | done |
 
 ## Prerequisites
 
@@ -185,6 +186,43 @@ The gain is real but small and costs extra model calls: on this corpus the judge
 "enough" on the first attempt most of the time, so agentic retrieval mostly pays twice
 for the same answer. The honest conclusion is that judge + reformulation earns its keep
 when retrieval fails, and here it rarely does.
+
+## Hybrid retrieval (phase 8)
+
+```bash
+go run ./cmd/assistant eval -k 1,3,5,8 -mode vector
+go run ./cmd/assistant eval -k 1,3,5,8 -mode lexical
+go run ./cmd/assistant eval -k 1,3,5,8 -mode hybrid
+go run ./cmd/assistant eval -agentic -k 1,3,5,8
+```
+
+The `VectorStore` port now takes a `SearchRequest{Query, Embedding, Limit, Mode}`
+(`vector` | `lexical` | `hybrid`, empty means vector) and returns a `Score` where
+higher is better (cosine similarity, `ts_rank`, RRF). Postgres implements the
+lexical leg with `to_tsvector('spanish', ...)` (migration `0003`) fused in one
+query with RRF (`RRF_K`, default 60); migration `0004` adds `heading_path` to the
+tsvector because the vector leg embeds heading + content and the lexical leg must
+see the same text. `SEARCH_MODE` selects the runtime leg (default `vector`);
+attempt 1 uses it and judge retries switch to `hybrid` with the reformulated query
+(switch-source), recorded per attempt in `AgenticResult.Modes` and the SSE
+`agentic` event.
+
+Measured on the extended corpus (16 documents, 41 chunks, 27 questions, 12 of them
+adversarial for embeddings: exact menu names, numeric limits, acronyms):
+
+| retriever | recall@1 | recall@3 | recall@8 | MRR |
+| --- | --- | --- | --- | --- |
+| vector | 0.889 | 1.000 | 1.000 | 0.938 |
+| lexical | 0.222 | 0.222 | 0.222 | 0.222 |
+| hybrid | 0.889 | 1.000 | 1.000 | 0.938 |
+| agentic | 0.889 | 1.000 | 1.000 | 0.938 |
+
+FTS alone loses on natural-language questions (`websearch_to_tsquery` ANDs every
+term and Spanish stemming mismatches inflections like elegir/elige), but wins the
+exact-term questions (`.gpl`, "Texto en arco", `Mayús`). Hybrid ties vector
+instead of beating it, so the default stays `vector` per the phase 3 methodology:
+flip it only when a measurement says otherwise. Same for agentic: judge +
+reformulation + switch-source cost extra calls and here tie the single shot.
 
 ## HTTP API and UI (phase 6)
 
