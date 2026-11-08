@@ -27,11 +27,16 @@ const (
 	defaultChunkOverlap   = 150
 	defaultChunkMinChars  = 200
 	defaultDocsDir        = "docs"
-	defaultHTTPAddr       = ":8080"
+	// Loopback by default: a single-user assistant must not listen on every
+	// interface unless the operator asks. In Docker the compose file overrides
+	// this with :8080 because published ports arrive via eth0, not lo.
+	defaultHTTPAddr       = "127.0.0.1:8080"
 	defaultWebDir         = "web/dist"
 	defaultLogLevel       = "info"
 	defaultSearchMode     = "vector"
 	defaultRRFK           = 60
+	defaultRateLimitRPS   = 1
+	defaultRateLimitBurst = 5
 )
 
 // Config is everything the binary needs to run.
@@ -52,6 +57,12 @@ type Config struct {
 	LogLevel       slog.Level
 	SearchMode     ports.SearchMode
 	RRFK           float64
+	// APIToken guards POST /api/ask and /api/agent with a Bearer token.
+	// Empty means open (dev default) and logs a warning at startup.
+	APIToken string
+	// Token-bucket per client IP on the expensive endpoints.
+	RateLimitRPS   float64
+	RateLimitBurst int
 }
 
 // Load reads the environment and fails on values that cannot work. Defaults are
@@ -94,6 +105,14 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	rps, err := floatEnv("RATE_LIMIT_RPS", defaultRateLimitRPS)
+	if err != nil {
+		return Config{}, err
+	}
+	burst, err := intEnv("RATE_LIMIT_BURST", defaultRateLimitBurst)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		DatabaseURL:    env("DATABASE_URL", defaultDatabaseURL),
@@ -112,6 +131,9 @@ func Load() (Config, error) {
 		LogLevel:       level,
 		SearchMode:     searchMode,
 		RRFK:           rrfK,
+		APIToken:       strings.TrimSpace(os.Getenv("API_TOKEN")),
+		RateLimitRPS:   rps,
+		RateLimitBurst: burst,
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -153,6 +175,12 @@ func (c Config) validate() error {
 	}
 	if c.RRFK <= 0 {
 		return fmt.Errorf("config: RRF_K must be positive, got %v", c.RRFK)
+	}
+	if c.RateLimitRPS <= 0 {
+		return fmt.Errorf("config: RATE_LIMIT_RPS must be positive, got %v", c.RateLimitRPS)
+	}
+	if c.RateLimitBurst <= 0 {
+		return fmt.Errorf("config: RATE_LIMIT_BURST must be positive, got %d", c.RateLimitBurst)
 	}
 	switch c.SearchMode {
 	case ports.SearchModeVector, ports.SearchModeLexical, ports.SearchModeHybrid:
