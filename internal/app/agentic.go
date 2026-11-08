@@ -40,11 +40,14 @@ type AgenticAsk struct {
 
 // AgenticResult reports what happened, including the queries actually used: with a
 // retriever that reformulates, "which query worked" is the interesting part.
+// Modes records the search mode per attempt: the first attempt uses the
+// configured mode, retries switch to hybrid (switch-source).
 type AgenticResult struct {
 	Answer       domain.Answer
 	Retrieved    int
 	Attempts     int
 	Queries      []string
+	Modes        []string
 	JudgeReason  string
 	EmbedTime    time.Duration
 	SearchTime   time.Duration
@@ -167,8 +170,19 @@ func (uc *AgenticAsk) retrieve(ctx context.Context, question string, result *Age
 			return nil, err
 		}
 
+		// Switch-source: the first attempt honours the configured mode;
+		// when the judge says the evidence is insufficient, retries fuse
+		// the lexical leg by switching to hybrid with the reformulated query.
+		mode := uc.searchMode
+		if mode == "" {
+			mode = ports.SearchModeVector
+		}
+		if attempt > 1 {
+			mode = ports.SearchModeHybrid
+		}
+
 		embedStart := time.Now()
-		hits, err := searchHits(ctx, uc.embedder, uc.store, query, uc.topK, uc.searchMode)
+		hits, err := searchHits(ctx, uc.embedder, uc.store, query, uc.topK, mode)
 		if err != nil {
 			return nil, fmt.Errorf("agentic ask: %w", err)
 		}
@@ -177,6 +191,7 @@ func (uc *AgenticAsk) retrieve(ctx context.Context, question string, result *Age
 
 		result.Attempts = attempt
 		result.Queries = append(result.Queries, query)
+		result.Modes = append(result.Modes, string(mode))
 		last = hits
 
 		judgeStart := time.Now()

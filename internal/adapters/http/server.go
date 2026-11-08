@@ -154,6 +154,7 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 		_ = stream.event("agentic", map[string]any{
 			"attempts": result.Attempts,
 			"queries":  result.Queries,
+			"modes":    result.Modes,
 			"reason":   result.JudgeReason,
 		})
 	default:

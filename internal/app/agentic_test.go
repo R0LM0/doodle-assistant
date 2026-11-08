@@ -8,6 +8,8 @@ import (
 
 	"github.com/r0lm0/doodle-assistant/internal/adapters/memory"
 	"github.com/r0lm0/doodle-assistant/internal/app"
+	"github.com/r0lm0/doodle-assistant/internal/domain"
+	"github.com/r0lm0/doodle-assistant/internal/ports"
 )
 
 func newAgentic(t *testing.T, emb *memory.Embedder, store *memory.VectorStore, chat, judgeChat *memory.ChatModel, attempts int) *app.AgenticAsk {
@@ -135,5 +137,68 @@ func TestAgenticRetrieveExposesTheLoopForEvaluation(t *testing.T) {
 	}
 	if len(hits) != 1 {
 		t.Errorf("hits = %d, want 1 (topK honoured)", len(hits))
+	}
+}
+
+// recordingStore delegates to the memory fake while recording SearchRequests.
+type recordingStore struct {
+	inner *memory.VectorStore
+	reqs  []ports.SearchRequest
+}
+
+func (s *recordingStore) DocumentHash(ctx context.Context, p string) (string, bool, error) {
+	return s.inner.DocumentHash(ctx, p)
+}
+
+func (s *recordingStore) SaveDocument(ctx context.Context, d domain.Document) (int64, error) {
+	return s.inner.SaveDocument(ctx, d)
+}
+
+func (s *recordingStore) Search(ctx context.Context, req ports.SearchRequest) ([]ports.SearchHit, error) {
+	s.reqs = append(s.reqs, req)
+	return s.inner.Search(ctx, req)
+}
+
+func (s *recordingStore) Stats(ctx context.Context) (ports.StoreStats, error) {
+	return s.inner.Stats(ctx)
+}
+
+func TestAgenticRetrySwitchesSourceToHybrid(t *testing.T) {
+	emb := memory.NewEmbedder(8)
+	inner := seededStore(t, emb)
+	store := &recordingStore{inner: inner}
+	chat := &memory.ChatModel{Deltas: []string{"respuesta"}}
+	judgeChat := &memory.ChatModel{Turns: []memory.ChatTurn{
+		{Deltas: []string{"NO\nfalta evidencia"}},
+		{Deltas: []string{"tope de exportacion 1920"}},
+		{Deltas: []string{"SI\nahora si"}},
+	}}
+	judge, err := app.NewEvidenceJudge(judgeChat)
+	if err != nil {
+		t.Fatalf("NewEvidenceJudge: %v", err)
+	}
+	uc, err := app.NewAgenticAsk(emb, store, chat, judge, app.AgenticConfig{TopK: 2, MaxAttempts: 2})
+	if err != nil {
+		t.Fatalf("NewAgenticAsk: %v", err)
+	}
+
+	result, err := uc.Ask(context.Background(), "¿hasta cuánto exporta?", func(string) error { return nil })
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	if result.Attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", result.Attempts)
+	}
+	if len(store.reqs) != 2 {
+		t.Fatalf("searches = %d, want 2", len(store.reqs))
+	}
+	if store.reqs[0].Mode != ports.SearchModeVector {
+		t.Errorf("first attempt mode = %q, want vector", string(store.reqs[0].Mode))
+	}
+	if store.reqs[1].Mode != ports.SearchModeHybrid {
+		t.Errorf("retry mode = %q, want hybrid (switch-source)", string(store.reqs[1].Mode))
+	}
+	if len(result.Modes) != 2 || result.Modes[0] != string(ports.SearchModeVector) || result.Modes[1] != string(ports.SearchModeHybrid) {
+		t.Errorf("result modes = %v, want [vector hybrid]", result.Modes)
 	}
 }
