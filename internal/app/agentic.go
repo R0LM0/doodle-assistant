@@ -21,6 +21,7 @@ const (
 type AgenticConfig struct {
 	TopK        int
 	MaxAttempts int
+	SearchMode  ports.SearchMode
 	Logger      *slog.Logger
 }
 
@@ -33,6 +34,7 @@ type AgenticAsk struct {
 	judge       *EvidenceJudge
 	topK        int
 	maxAttempts int
+	searchMode  ports.SearchMode
 	logger      *slog.Logger
 }
 
@@ -72,6 +74,9 @@ func NewAgenticAsk(embedder ports.Embedder, store ports.VectorStore, chat ports.
 	if cfg.MaxAttempts > maxAgenticAttempts {
 		cfg.MaxAttempts = maxAgenticAttempts
 	}
+	if cfg.SearchMode == "" {
+		cfg.SearchMode = ports.SearchModeVector
+	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
@@ -82,6 +87,7 @@ func NewAgenticAsk(embedder ports.Embedder, store ports.VectorStore, chat ports.
 		judge:       judge,
 		topK:        cfg.TopK,
 		maxAttempts: cfg.MaxAttempts,
+		searchMode:  cfg.SearchMode,
 		logger:      cfg.Logger,
 	}, nil
 }
@@ -162,7 +168,7 @@ func (uc *AgenticAsk) retrieve(ctx context.Context, question string, result *Age
 		}
 
 		embedStart := time.Now()
-		hits, err := searchHits(ctx, uc.embedder, uc.store, query, uc.topK)
+		hits, err := searchHits(ctx, uc.embedder, uc.store, query, uc.topK, uc.searchMode)
 		if err != nil {
 			return nil, fmt.Errorf("agentic ask: %w", err)
 		}

@@ -368,7 +368,14 @@ func (c *CLI) eval(ctx context.Context, args []string) int {
 	ksFlag := flags.String("k", "1,3,5,8", "comma separated K values")
 	verbose := flags.Bool("verbose", false, "print the rank of each question")
 	agentic := flags.Bool("agentic", false, "measure the agentic retriever")
+	modeFlag := flags.String("mode", "vector", "retrieval mode: vector, lexical or hybrid")
 	if err := flags.Parse(args); err != nil {
+		return exitUsage
+	}
+
+	mode, err := parseSearchMode(*modeFlag)
+	if err != nil {
+		fmt.Fprintf(c.deps.Err, "eval: %v\n", err)
 		return exitUsage
 	}
 
@@ -380,6 +387,9 @@ func (c *CLI) eval(ctx context.Context, args []string) int {
 	if c.deps.Evaluator == nil {
 		fmt.Fprintln(c.deps.Err, "eval: no evaluator configured")
 		return exitFailure
+	}
+	if setter, ok := c.deps.Evaluator.(interface{ SetSearchMode(ports.SearchMode) }); ok {
+		setter.SetSearchMode(mode)
 	}
 
 	var report eval.Report
@@ -402,6 +412,19 @@ func (c *CLI) eval(ctx context.Context, args []string) int {
 
 	fmt.Fprint(c.deps.Out, report.String())
 	return exitOK
+}
+
+func parseSearchMode(raw string) (ports.SearchMode, error) {
+	switch ports.SearchMode(strings.ToLower(strings.TrimSpace(raw))) {
+	case ports.SearchModeVector:
+		return ports.SearchModeVector, nil
+	case ports.SearchModeLexical:
+		return ports.SearchModeLexical, nil
+	case ports.SearchModeHybrid:
+		return ports.SearchModeHybrid, nil
+	default:
+		return "", fmt.Errorf("mode must be vector, lexical or hybrid, got %q", raw)
+	}
 }
 
 func parseKs(raw string) ([]int, error) {

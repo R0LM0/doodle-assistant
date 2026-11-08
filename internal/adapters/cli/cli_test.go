@@ -292,6 +292,18 @@ func TestEvalRejectsInvalidK(t *testing.T) {
 	}
 }
 
+func TestEvalRejectsInvalidMode(t *testing.T) {
+	ev := &fakeEvaluator{}
+	c, _, errOut := newCLI(t, cli.Deps{Evaluator: ev})
+
+	if code := c.Run(context.Background(), []string{"eval", "-mode", "bm25"}); code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(errOut.String(), "mode must be") {
+		t.Errorf("stderr = %q", errOut.String())
+	}
+}
+
 type fakeAgent struct {
 	deltas []string
 	result app.AgentResult

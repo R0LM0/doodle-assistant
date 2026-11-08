@@ -64,6 +64,7 @@ func run() int {
 		logger.Error("build postgres store", "error", err)
 		return 1
 	}
+	store.RRFK = cfg.RRFK
 
 	migrator, err := postgres.NewMigrator(pool, migrations.FS)
 	if err != nil {
@@ -96,8 +97,9 @@ func run() int {
 	}
 
 	asker, err := app.NewAsk(embedder, store, chatModel, app.AskConfig{
-		TopK:   cfg.TopK,
-		Logger: logger,
+		TopK:       cfg.TopK,
+		SearchMode: cfg.SearchMode,
+		Logger:     logger,
 	})
 	if err != nil {
 		logger.Error("build ask use case", "error", err)
@@ -134,7 +136,7 @@ func run() int {
 	}
 
 	// Phase 5: the same agent may now decide to search the documentation.
-	searchTool, err := app.NewSearchDocsTool(embedder, store, cfg.TopK)
+	searchTool, err := app.NewSearchDocsTool(embedder, store, cfg.TopK, cfg.SearchMode)
 	if err != nil {
 		logger.Error("build search_docs tool", "error", err)
 		return 1
@@ -148,8 +150,9 @@ func run() int {
 	}
 
 	agentic, err := app.NewAgenticAsk(embedder, store, chatModel, evidenceJudge, app.AgenticConfig{
-		TopK:   cfg.TopK,
-		Logger: logger,
+		TopK:       cfg.TopK,
+		SearchMode: cfg.SearchMode,
+		Logger:     logger,
 	})
 	if err != nil {
 		logger.Error("build agentic ask", "error", err)
@@ -167,6 +170,7 @@ func run() int {
 		logger.Error("build evaluator", "error", err)
 		return 1
 	}
+	evaluator.Mode = cfg.SearchMode
 
 	web, err := httpadapter.NewServer(httpadapter.Deps{
 		Asker:   asker,

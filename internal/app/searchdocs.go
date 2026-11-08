@@ -14,7 +14,7 @@ import (
 const ToolSearchDocs = "search_docs"
 
 // NewSearchDocsTool wraps embed+search as a tool.
-func NewSearchDocsTool(embedder ports.Embedder, store ports.VectorStore, topK int) (ports.Tool, error) {
+func NewSearchDocsTool(embedder ports.Embedder, store ports.VectorStore, topK int, mode ports.SearchMode) (ports.Tool, error) {
 	if embedder == nil {
 		return nil, errors.New("search_docs: embedder is required")
 	}
@@ -24,13 +24,17 @@ func NewSearchDocsTool(embedder ports.Embedder, store ports.VectorStore, topK in
 	if topK <= 0 {
 		topK = defaultTopK
 	}
-	return searchDocsTool{embedder: embedder, store: store, topK: topK}, nil
+	if mode == "" {
+		mode = ports.SearchModeVector
+	}
+	return searchDocsTool{embedder: embedder, store: store, topK: topK, mode: mode}, nil
 }
 
 type searchDocsTool struct {
 	embedder ports.Embedder
 	store    ports.VectorStore
 	topK     int
+	mode     ports.SearchMode
 }
 
 func (searchDocsTool) Spec() ports.ToolSpec {
@@ -57,7 +61,7 @@ func (t searchDocsTool) Execute(ctx context.Context, args json.RawMessage) (stri
 		return "", fmt.Errorf("search_docs: query is too long (%d chars, max %d)", len(in.Query), maxQuestionChars)
 	}
 
-	hits, err := searchHits(ctx, t.embedder, t.store, in.Query, t.topK)
+	hits, err := searchHits(ctx, t.embedder, t.store, in.Query, t.topK, t.mode)
 	if err != nil {
 		return "", fmt.Errorf("search_docs: %w", err)
 	}
@@ -78,7 +82,7 @@ func (t searchDocsTool) Execute(ctx context.Context, args json.RawMessage) (stri
 }
 
 // searchHits is the shared embed-one-query-then-search step.
-func searchHits(ctx context.Context, embedder ports.Embedder, store ports.VectorStore, query string, topK int) ([]ports.SearchHit, error) {
+func searchHits(ctx context.Context, embedder ports.Embedder, store ports.VectorStore, query string, topK int, mode ports.SearchMode) ([]ports.SearchHit, error) {
 	vectors, err := embedder.Embed(ctx, []string{query})
 	if err != nil {
 		return nil, fmt.Errorf("embed query: %w", err)
@@ -86,7 +90,10 @@ func searchHits(ctx context.Context, embedder ports.Embedder, store ports.Vector
 	if len(vectors) != 1 || len(vectors[0]) == 0 {
 		return nil, fmt.Errorf("embedder returned %d vectors for one query", len(vectors))
 	}
-	hits, err := store.Search(ctx, ports.SearchRequest{Query: query, Embedding: vectors[0], Limit: topK, Mode: ports.SearchModeVector})
+	if mode == "" {
+		mode = ports.SearchModeVector
+	}
+	hits, err := store.Search(ctx, ports.SearchRequest{Query: query, Embedding: vectors[0], Limit: topK, Mode: mode})
 	if err != nil {
 		return nil, fmt.Errorf("search chunks: %w", err)
 	}

@@ -22,17 +22,19 @@ const (
 
 // AskConfig configures the RAG use case.
 type AskConfig struct {
-	TopK   int
-	Logger *slog.Logger
+	TopK       int
+	SearchMode ports.SearchMode
+	Logger     *slog.Logger
 }
 
 // Ask answers a question from the indexed knowledge base.
 type Ask struct {
-	embedder ports.Embedder
-	store    ports.VectorStore
-	chat     ports.ChatModel
-	topK     int
-	logger   *slog.Logger
+	embedder   ports.Embedder
+	store      ports.VectorStore
+	chat       ports.ChatModel
+	topK        int
+	searchMode ports.SearchMode
+	logger     *slog.Logger
 }
 
 // AskResult carries the answer plus the stage timings the brief asks to expose,
@@ -58,10 +60,13 @@ func NewAsk(embedder ports.Embedder, store ports.VectorStore, chat ports.ChatMod
 	if cfg.TopK <= 0 {
 		cfg.TopK = defaultTopK
 	}
+	if cfg.SearchMode == "" {
+		cfg.SearchMode = ports.SearchModeVector
+	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	return &Ask{embedder: embedder, store: store, chat: chat, topK: cfg.TopK, logger: cfg.Logger}, nil
+	return &Ask{embedder: embedder, store: store, chat: chat, topK: cfg.TopK, searchMode: cfg.SearchMode, logger: cfg.Logger}, nil
 }
 
 // Ask runs the classic RAG pipeline: embed, retrieve, prompt, stream.
@@ -84,7 +89,7 @@ func (uc *Ask) Ask(ctx context.Context, question string, emit func(delta string)
 	result.EmbedTime = time.Since(embedStart)
 
 	searchStart := time.Now()
-	hits, err := uc.store.Search(ctx, ports.SearchRequest{Query: question, Embedding: vectors[0], Limit: uc.topK, Mode: ports.SearchModeVector})
+	hits, err := uc.store.Search(ctx, ports.SearchRequest{Query: question, Embedding: vectors[0], Limit: uc.topK, Mode: uc.searchMode})
 	if err != nil {
 		return result, fmt.Errorf("ask: search chunks: %w", err)
 	}

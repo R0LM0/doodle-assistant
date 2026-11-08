@@ -19,13 +19,15 @@ var _ ports.VectorStore = (*Store)(nil)
 // Store is the pgvector-backed VectorStore.
 type Store struct {
 	pool *pgxpool.Pool
+	// RRFK is the RRF rank offset for hybrid search. Zero means the default.
+	RRFK float64
 }
 
 func NewStore(pool *pgxpool.Pool) (*Store, error) {
 	if pool == nil {
 		return nil, errors.New("postgres store: pool is required")
 	}
-	return &Store{pool: pool}, nil
+	return &Store{pool: pool, RRFK: rrfKDefault}, nil
 }
 
 // DocumentHash returns the stored content hash of a source path.
