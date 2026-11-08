@@ -14,7 +14,7 @@ Feature branch sugerida: `feat/fase-8-hibrida`. Plan base: `.zcode/plans/plan-se
 - T1 (S1,S3,S4, route: inline, commit: feat(ports): SearchRequest with mode; Distance → Score — 2169041)
 - T2 (S3,S4, route: inline, commit: feat(postgres): lexical + hybrid search with RRF — 221ec35)
 - T3 (S3,S4, route: inline, commit: feat(config,eval): SEARCH_MODE y RRF_K, flag -mode en eval — c6319ec)
-- T4 (S3,S4, route: inline, commit: feat(app): judge retry switches source)
+- T4 (S3,S4, route: inline, commit: feat(app): judge retry switches source — f7168a6)
 - T5 (S3,S4, route: inline, commit: feat(docs): corpus fase 8)
 - T6 (S1,S2,S3,S4, route: inline, commit: docs: fase 8 en README)
 
@@ -27,3 +27,4 @@ Feature branch sugerida: `feat/fase-8-hibrida`. Plan base: `.zcode/plans/plan-se
 - L5: T1 hecho en 2169041 (branch feat/fase-8-hibrida). Verificado: go test ./..., vet, integration postgres, web build.
 - L6: T2 hecho en 221ec35. Verificado: unit, integration (3 tests search), healthcheck spanish FTS. Slice boundary: T1 276 + T2 191 = 2 commits reviewables, cada uno <400.
 - L7: T3 hecho en c6319ec. Medido real: vector r1 0.867, lexical 0.133, hybrid 0.800. Slice: 3 commits/693 líneas acumuladas, cada commit <400.
+- L8: T4 hecho en f7168a6. Verificado: 6 tests agentic incl. switch-source. Slice: 4 commits/775 acumuladas, cada commit <400.
