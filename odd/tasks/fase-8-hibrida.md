@@ -11,7 +11,7 @@ Feature branch sugerida: `feat/fase-8-hibrida`. Plan base: `.zcode/plans/plan-se
 
 ## Tasks
 
-- T1 (S1,S3,S4, route: inline, commit: feat(ports): SearchRequest with mode; Distance → Score)
+- T1 (S1,S3,S4, route: inline, commit: feat(ports): SearchRequest with mode; Distance → Score — 2169041)
 - T2 (S3,S4, route: inline, commit: feat(postgres): lexical + hybrid search with RRF)
 - T3 (S3,S4, route: inline, commit: feat(config,eval): SEARCH_MODE y RRF_K, flag -mode en eval)
 - T4 (S3,S4, route: inline, commit: feat(app): judge retry switches source)
@@ -24,3 +24,4 @@ Feature branch sugerida: `feat/fase-8-hibrida`. Plan base: `.zcode/plans/plan-se
 - L2: "hay que hacer las pruebas en local" → unitarias/vet/race/integración/healthcheck en verde (stats documents=8 chunks=33)
 - L3: explorador reportó fase 8 planificada no implementada + 10 gaps; usuario eligió "Fase 8 híbrida"
 - L4: plan leído en .zcode/plans/plan-session_520ad40ffdc4abfb96e379f560e1a7f3.md; puerto actual Search(ctx, embedding, limit) solo vectorial
+- L5: T1 hecho en 2169041 (branch feat/fase-8-hibrida). Verificado: go test ./..., vet, integration postgres, web build.
