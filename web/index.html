@@ -38,6 +38,13 @@
             <button type="button" id="ask-cancel" hidden>Cancelar</button>
             <span class="hint">Ctrl + Enter para enviar</span>
           </div>
+
+          <div class="row">
+            <label for="api-token">Token de API</label>
+            <input id="api-token" name="token" type="password" autocomplete="off"
+                   placeholder="Solo si el servidor lo exige" />
+            <span class="hint">Se guarda en este navegador</span>
+          </div>
         </form>
 
         <p id="ask-status" class="status" role="status" aria-live="polite"></p>

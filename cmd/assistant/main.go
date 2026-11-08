@@ -173,16 +173,23 @@ func run() int {
 	evaluator.Mode = cfg.SearchMode
 
 	web, err := httpadapter.NewServer(httpadapter.Deps{
-		Asker:   asker,
-		Agentic: agentic,
-		Agent:   agentRunner,
-		Stats:   store,
-		WebDir:  cfg.WebDir,
-		Logger:  logger,
+		Asker:      asker,
+		Agentic:    agentic,
+		Agent:      agentRunner,
+		Stats:      store,
+		WebDir:     cfg.WebDir,
+		Logger:     logger,
+		APIToken:   cfg.APIToken,
+		RateRPS:    cfg.RateLimitRPS,
+		RateBurst:  cfg.RateLimitBurst,
 	})
 	if err != nil {
 		logger.Error("build http server", "error", err)
 		return 1
+	}
+
+	if cfg.APIToken == "" {
+		logger.Warn("API_TOKEN is empty: /api/ask and /api/agent are open to whoever can reach the listener")
 	}
 
 	cmd, err := cli.New(cli.Deps{

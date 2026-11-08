@@ -69,10 +69,12 @@ func newServer(t *testing.T) http.Handler {
 	t.Helper()
 
 	server, err := httpadapter.NewServer(httpadapter.Deps{
-		Asker:   fakeAsker{},
-		Agentic: fakeAgentic{},
-		Agent:   fakeAgent{},
-		Stats:   fakeStats{},
+		Asker:      fakeAsker{},
+		Agentic:    fakeAgentic{},
+		Agent:      fakeAgent{},
+		Stats:      fakeStats{},
+		RateRPS:    1000,
+		RateBurst:  1000,
 	})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
@@ -199,6 +201,63 @@ func TestAskFailureBecomesAnErrorEvent(t *testing.T) {
 	rec := doJSON(t, server.Handler(), http.MethodPost, "/api/ask", `{"question":"q"}`)
 	if !strings.Contains(rec.Body.String(), "event: error") {
 		t.Errorf("error stream = %s", rec.Body.String())
+	}
+}
+
+func TestAskRequiresBearerTokenWhenConfigured(t *testing.T) {
+	server, err := httpadapter.NewServer(httpadapter.Deps{Asker: fakeAsker{}, APIToken: "secreto"})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	handler := server.Handler()
+
+	rec := doJSON(t, handler, http.MethodPost, "/api/ask", `{"question":"q","mode":"none"}`)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("no token status = %d, want 401", rec.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/ask", strings.NewReader(`{"question":"q","mode":"none"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer incorrecto")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("wrong token status = %d, want 401", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/ask", strings.NewReader(`{"question":"q","mode":"none"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer secreto")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "sin contexto") {
+		t.Errorf("valid token stream = %d %s", rec.Code, rec.Body.String())
+	}
+
+	// Health and stats stay open: liveness probes must not need the secret.
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/health", nil))
+	if rec.Code != http.StatusOK {
+		t.Errorf("health status = %d, want open", rec.Code)
+	}
+}
+
+func TestAskIsRateLimitedPerIP(t *testing.T) {
+	server, err := httpadapter.NewServer(httpadapter.Deps{Asker: fakeAsker{}, RateRPS: 0.01, RateBurst: 1})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	handler := server.Handler()
+
+	if rec := doJSON(t, handler, http.MethodPost, "/api/ask", `{"question":"q","mode":"none"}`); rec.Code != http.StatusOK {
+		t.Fatalf("first request status = %d, want 200", rec.Code)
+	}
+	rec := doJSON(t, handler, http.MethodPost, "/api/ask", `{"question":"q","mode":"none"}`)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("second request status = %d, want 429", rec.Code)
+	}
+	if rec.Header().Get("Retry-After") == "" {
+		t.Error("429 must carry a Retry-After header")
 	}
 }
 

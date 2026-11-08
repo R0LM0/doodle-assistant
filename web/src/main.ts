@@ -36,6 +36,21 @@ const askAnswer = $<HTMLElement>("ask-answer");
 const askTimings = $<HTMLDivElement>("ask-timings");
 const askSourcesWrap = $<HTMLElement>("ask-sources-wrap");
 const askSources = $<HTMLUListElement>("ask-sources");
+const apiToken = $<HTMLInputElement>("api-token");
+
+// The token is optional: the server only demands it when API_TOKEN is set.
+// Kept in localStorage so it survives reloads, never in the URL or history.
+apiToken.value = localStorage.getItem("doodle-api-token") ?? "";
+apiToken.addEventListener("input", () => {
+  if (apiToken.value) localStorage.setItem("doodle-api-token", apiToken.value);
+  else localStorage.removeItem("doodle-api-token");
+});
+
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (apiToken.value.trim()) headers["Authorization"] = `Bearer ${apiToken.value.trim()}`;
+  return headers;
+}
 
 const agentForm = $<HTMLFormElement>("agent-form");
 const agentInput = $<HTMLTextAreaElement>("agent-input");
@@ -58,7 +73,7 @@ async function streamSSE(
 ): Promise<void> {
   const response = await fetch(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify(body),
     signal,
   });

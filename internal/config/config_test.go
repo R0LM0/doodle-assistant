@@ -14,7 +14,8 @@ func clearEnv(t *testing.T) {
 	for _, key := range []string{
 		"DATABASE_URL", "OLLAMA_BASE_URL", "CHAT_MODEL", "EMBED_MODEL",
 		"EMBED_DIM", "EMBED_BATCH_SIZE", "DOCS_DIR", "LOG_LEVEL",
-		"SEARCH_MODE", "RRF_K", "TOP_K",
+		"SEARCH_MODE", "RRF_K", "TOP_K", "API_TOKEN",
+		"RATE_LIMIT_RPS", "RATE_LIMIT_BURST",
 	} {
 		t.Setenv(key, "")
 	}
@@ -55,6 +56,15 @@ func TestLoadUsesDevelopmentDefaults(t *testing.T) {
 	if cfg.RRFK != 60 {
 		t.Errorf("RRFK = %v", cfg.RRFK)
 	}
+	if cfg.HTTPAddr != "127.0.0.1:8080" {
+		t.Errorf("HTTPAddr = %q, want loopback default", cfg.HTTPAddr)
+	}
+	if cfg.APIToken != "" {
+		t.Errorf("APIToken = %q, want empty default", cfg.APIToken)
+	}
+	if cfg.RateLimitRPS != 1 || cfg.RateLimitBurst != 5 {
+		t.Errorf("rate limit = %v/%d", cfg.RateLimitRPS, cfg.RateLimitBurst)
+	}
 }
 
 func TestLoadReadsOverrides(t *testing.T) {
@@ -67,6 +77,9 @@ func TestLoadReadsOverrides(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("SEARCH_MODE", "hybrid")
 	t.Setenv("RRF_K", "30")
+	t.Setenv("API_TOKEN", "secreto")
+	t.Setenv("RATE_LIMIT_RPS", "2")
+	t.Setenv("RATE_LIMIT_BURST", "10")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -88,6 +101,9 @@ func TestLoadReadsOverrides(t *testing.T) {
 	if cfg.SearchMode != "hybrid" || cfg.RRFK != 30 {
 		t.Errorf("search = %q/%v", string(cfg.SearchMode), cfg.RRFK)
 	}
+	if cfg.APIToken != "secreto" || cfg.RateLimitRPS != 2 || cfg.RateLimitBurst != 10 {
+		t.Errorf("auth/limit = %q/%v/%d", cfg.APIToken, cfg.RateLimitRPS, cfg.RateLimitBurst)
+	}
 }
 
 func TestLoadRejectsInvalidValues(t *testing.T) {
@@ -99,6 +115,8 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		"unknown search mode":   "SEARCH_MODE",
 		"non-numeric RRF_K":     "RRF_K",
 		"zero RRF_K":            "RRF_K_ZERO",
+		"zero rate":             "RATE_LIMIT_RPS",
+		"zero burst":            "RATE_LIMIT_BURST",
 	}
 
 	for name, key := range cases {
@@ -117,6 +135,10 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 				t.Setenv("RRF_K", "mucho")
 			case "RRF_K_ZERO":
 				t.Setenv("RRF_K", "0")
+			case "RATE_LIMIT_RPS":
+				t.Setenv("RATE_LIMIT_RPS", "0")
+			case "RATE_LIMIT_BURST":
+				t.Setenv("RATE_LIMIT_BURST", "0")
 			}
 
 			if _, err := config.Load(); err == nil {

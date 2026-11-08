@@ -54,19 +54,26 @@ type Deps struct {
 	Stats   StatsReader
 	WebDir  string
 	Logger  *slog.Logger
+	// APIToken guards POST /api/ask and /api/agent with a Bearer token;
+	// empty means open (dev default). RateRPS/RateBurst bound the same two
+	// endpoints per client IP; non-positive means the dev defaults.
+	APIToken   string
+	RateRPS    float64
+	RateBurst  int
 }
 
 // Server is the HTTP adapter.
 type Server struct {
 	deps Deps
 	mux  *http.ServeMux
+	limit *RateLimiter
 }
 
 func NewServer(deps Deps) (*Server, error) {
 	if deps.Logger == nil {
 		deps.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	s := &Server{deps: deps, mux: http.NewServeMux()}
+	s := &Server{deps: deps, mux: http.NewServeMux(), limit: NewRateLimiter(deps.RateRPS, deps.RateBurst)}
 	s.routes()
 	return s, nil
 }
@@ -77,8 +84,11 @@ func (s *Server) Handler() http.Handler { return s.mux }
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
 	s.mux.HandleFunc("GET /api/stats", s.handleStats)
-	s.mux.HandleFunc("POST /api/ask", s.handleAsk)
-	s.mux.HandleFunc("POST /api/agent", s.handleAgent)
+	// Rate-limit first (it also throttles token guessing), auth second:
+	// denials happen before the SSE headers are sent, so they stay real
+	// 401/429 statuses instead of stream events.
+	s.mux.Handle("POST /api/ask", s.limit.limit(requireToken(s.deps.APIToken, http.HandlerFunc(s.handleAsk))))
+	s.mux.Handle("POST /api/agent", s.limit.limit(requireToken(s.deps.APIToken, http.HandlerFunc(s.handleAgent))))
 	s.mux.Handle("GET /", s.static())
 }
 
