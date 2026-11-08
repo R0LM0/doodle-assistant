@@ -32,7 +32,11 @@ func (s *Store) Search(ctx context.Context, req ports.SearchRequest) ([]ports.Se
 	case ports.SearchModeLexical:
 		return s.searchLexical(ctx, req)
 	case ports.SearchModeHybrid:
-		return s.searchHybrid(ctx, req, rrfKDefault)
+		k := s.RRFK
+		if k <= 0 {
+			k = rrfKDefault
+		}
+		return s.searchHybrid(ctx, req, k)
 	default:
 		return nil, fmt.Errorf("postgres store: unknown search mode %q", string(mode))
 	}
