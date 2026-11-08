@@ -34,6 +34,12 @@ if [ -z "$vector_version" ]; then
 fi
 ok "pgvector $vector_version"
 
+# --- 2b. FTS column for hybrid search (fase 8) -----------------------------
+if [ "$(psql_q "select to_tsvector('spanish', 'prueba')::text" | tr -d '[:space:]')" = "" ]; then
+  fail "spanish text search configuration missing"
+fi
+ok "spanish FTS configuration available"
+
 # --- 3. Ollama reachable --------------------------------------------------
 curl -sf -m 5 "$OLLAMA_BASE_URL/api/tags" >/dev/null || fail "Ollama unreachable at $OLLAMA_BASE_URL"
 ok "ollama reachable at $OLLAMA_BASE_URL"

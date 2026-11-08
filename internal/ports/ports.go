@@ -22,19 +22,38 @@ type Embedder interface {
 type VectorStore interface {
 	DocumentHash(ctx context.Context, sourcePath string) (hash string, found bool, err error)
 	SaveDocument(ctx context.Context, doc domain.Document) (documentID int64, err error)
-	Search(ctx context.Context, embedding []float32, limit int) ([]SearchHit, error)
+	Search(ctx context.Context, req SearchRequest) ([]SearchHit, error)
 	Stats(ctx context.Context) (StoreStats, error)
 }
 
+// SearchMode selects which index leg answers the query.
+type SearchMode string
+
+const (
+	SearchModeVector  SearchMode = "vector"
+	SearchModeLexical SearchMode = "lexical"
+	SearchModeHybrid  SearchMode = "hybrid"
+)
+
+// SearchRequest carries everything a leg needs: raw text for the lexical leg,
+// the embedding for the vector leg, and how many hits to return.
+// An empty Mode means vector, so old fakes keep compiling with vector behaviour.
+type SearchRequest struct {
+	Query     string
+	Embedding []float32
+	Limit     int
+	Mode      SearchMode
+}
+
 // SearchHit is one retrieved chunk plus the provenance the answer must cite.
-// Distance is cosine distance: 0 means identical direction, smaller is closer.
+// Score ranks hits: higher is better (cosine similarity, lexical overlap, RRF).
 type SearchHit struct {
 	SourcePath  string
 	Title       string
 	HeadingPath string
 	Position    int
 	Content     string
-	Distance    float64
+	Score       float64
 }
 
 // Chat roles.

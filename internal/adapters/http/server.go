@@ -154,6 +154,7 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 		_ = stream.event("agentic", map[string]any{
 			"attempts": result.Attempts,
 			"queries":  result.Queries,
+			"modes":    result.Modes,
 			"reason":   result.JudgeReason,
 		})
 	default:
@@ -173,12 +174,12 @@ func (s *Server) finishAsk(stream *sse, sources []domain.Source, retrieval, gene
 	type source struct {
 		SourcePath  string  `json:"source_path"`
 		HeadingPath string  `json:"heading_path"`
-		Distance    float64 `json:"distance"`
+		Score       float64 `json:"score"`
 		Content     string  `json:"content"`
 	}
 	out := make([]source, len(sources))
 	for i, src := range sources {
-		out[i] = source{SourcePath: src.SourcePath, HeadingPath: src.HeadingPath, Distance: src.Distance, Content: src.Content}
+		out[i] = source{SourcePath: src.SourcePath, HeadingPath: src.HeadingPath, Score: src.Score, Content: src.Content}
 	}
 
 	_ = stream.event("sources", map[string]any{"sources": out})

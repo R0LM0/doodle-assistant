@@ -19,6 +19,8 @@ type Retriever interface {
 type Runner struct {
 	embedder ports.Embedder
 	store    ports.VectorStore
+	// Mode selects the retrieval leg for the batched fast path.
+	Mode ports.SearchMode
 }
 
 func NewRunner(embedder ports.Embedder, store ports.VectorStore) (*Runner, error) {
@@ -28,7 +30,15 @@ func NewRunner(embedder ports.Embedder, store ports.VectorStore) (*Runner, error
 	if store == nil {
 		return nil, errors.New("eval: vector store is required")
 	}
-	return &Runner{embedder: embedder, store: store}, nil
+	return &Runner{embedder: embedder, store: store, Mode: ports.SearchModeVector}, nil
+}
+
+// SetSearchMode selects the retrieval leg for the batched fast path.
+func (r *Runner) SetSearchMode(mode ports.SearchMode) {
+	if mode == "" {
+		mode = ports.SearchModeVector
+	}
+	r.Mode = mode
 }
 
 // Evaluate embeds every question in one batch (15 questions in one HTTP call
@@ -113,7 +123,11 @@ func (r *Runner) retrieve(ctx context.Context, questions []Question, topK int) (
 
 	results := make([]Retrieved, len(questions))
 	for i, question := range questions {
-		hits, err := r.store.Search(ctx, vectors[i], topK)
+		mode := r.Mode
+		if mode == "" {
+			mode = ports.SearchModeVector
+		}
+		hits, err := r.store.Search(ctx, ports.SearchRequest{Query: question.Question, Embedding: vectors[i], Limit: topK, Mode: mode})
 		if err != nil {
 			return nil, fmt.Errorf("eval: search for %s: %w", question.ID, err)
 		}

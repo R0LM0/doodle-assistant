@@ -12,7 +12,7 @@ type Source struct {
 	Title       string
 	HeadingPath string
 	Position    int
-	Distance    float64
+	Score       float64
 	Content     string
 }
 

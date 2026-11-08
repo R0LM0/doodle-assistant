@@ -14,6 +14,7 @@ func clearEnv(t *testing.T) {
 	for _, key := range []string{
 		"DATABASE_URL", "OLLAMA_BASE_URL", "CHAT_MODEL", "EMBED_MODEL",
 		"EMBED_DIM", "EMBED_BATCH_SIZE", "DOCS_DIR", "LOG_LEVEL",
+		"SEARCH_MODE", "RRF_K", "TOP_K",
 	} {
 		t.Setenv(key, "")
 	}
@@ -48,6 +49,12 @@ func TestLoadUsesDevelopmentDefaults(t *testing.T) {
 	if cfg.LogLevel != slog.LevelInfo {
 		t.Errorf("LogLevel = %v", cfg.LogLevel)
 	}
+	if cfg.SearchMode != "vector" {
+		t.Errorf("SearchMode = %q", string(cfg.SearchMode))
+	}
+	if cfg.RRFK != 60 {
+		t.Errorf("RRFK = %v", cfg.RRFK)
+	}
 }
 
 func TestLoadReadsOverrides(t *testing.T) {
@@ -58,6 +65,8 @@ func TestLoadReadsOverrides(t *testing.T) {
 	t.Setenv("EMBED_BATCH_SIZE", "8")
 	t.Setenv("DOCS_DIR", "/srv/docs")
 	t.Setenv("LOG_LEVEL", "debug")
+	t.Setenv("SEARCH_MODE", "hybrid")
+	t.Setenv("RRF_K", "30")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -76,6 +85,9 @@ func TestLoadReadsOverrides(t *testing.T) {
 	if cfg.LogLevel != slog.LevelDebug {
 		t.Errorf("LogLevel = %v", cfg.LogLevel)
 	}
+	if cfg.SearchMode != "hybrid" || cfg.RRFK != 30 {
+		t.Errorf("search = %q/%v", string(cfg.SearchMode), cfg.RRFK)
+	}
 }
 
 func TestLoadRejectsInvalidValues(t *testing.T) {
@@ -84,6 +96,9 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		"non-integer batch":     "EMBED_BATCH_SIZE",
 		"unknown log level":     "LOG_LEVEL",
 		"zero dimension":        "EMBED_DIM_ZERO",
+		"unknown search mode":   "SEARCH_MODE",
+		"non-numeric RRF_K":     "RRF_K",
+		"zero RRF_K":            "RRF_K_ZERO",
 	}
 
 	for name, key := range cases {
@@ -96,6 +111,12 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 				t.Setenv(key, "verbose")
 			case "EMBED_DIM_ZERO":
 				t.Setenv("EMBED_DIM", "0")
+			case "SEARCH_MODE":
+				t.Setenv("SEARCH_MODE", "bm25")
+			case "RRF_K":
+				t.Setenv("RRF_K", "mucho")
+			case "RRF_K_ZERO":
+				t.Setenv("RRF_K", "0")
 			}
 
 			if _, err := config.Load(); err == nil {

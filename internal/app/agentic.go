@@ -21,6 +21,7 @@ const (
 type AgenticConfig struct {
 	TopK        int
 	MaxAttempts int
+	SearchMode  ports.SearchMode
 	Logger      *slog.Logger
 }
 
@@ -33,16 +34,20 @@ type AgenticAsk struct {
 	judge       *EvidenceJudge
 	topK        int
 	maxAttempts int
+	searchMode  ports.SearchMode
 	logger      *slog.Logger
 }
 
 // AgenticResult reports what happened, including the queries actually used: with a
 // retriever that reformulates, "which query worked" is the interesting part.
+// Modes records the search mode per attempt: the first attempt uses the
+// configured mode, retries switch to hybrid (switch-source).
 type AgenticResult struct {
 	Answer       domain.Answer
 	Retrieved    int
 	Attempts     int
 	Queries      []string
+	Modes        []string
 	JudgeReason  string
 	EmbedTime    time.Duration
 	SearchTime   time.Duration
@@ -72,6 +77,9 @@ func NewAgenticAsk(embedder ports.Embedder, store ports.VectorStore, chat ports.
 	if cfg.MaxAttempts > maxAgenticAttempts {
 		cfg.MaxAttempts = maxAgenticAttempts
 	}
+	if cfg.SearchMode == "" {
+		cfg.SearchMode = ports.SearchModeVector
+	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
@@ -82,6 +90,7 @@ func NewAgenticAsk(embedder ports.Embedder, store ports.VectorStore, chat ports.
 		judge:       judge,
 		topK:        cfg.TopK,
 		maxAttempts: cfg.MaxAttempts,
+		searchMode:  cfg.SearchMode,
 		logger:      cfg.Logger,
 	}, nil
 }
@@ -108,7 +117,7 @@ func (uc *AgenticAsk) Ask(ctx context.Context, question string, emit func(delta 
 			Title:       hit.Title,
 			HeadingPath: hit.HeadingPath,
 			Position:    hit.Position,
-			Distance:    hit.Distance,
+			Score:       hit.Score,
 			Content:     hit.Content,
 		}
 	}
@@ -161,8 +170,19 @@ func (uc *AgenticAsk) retrieve(ctx context.Context, question string, result *Age
 			return nil, err
 		}
 
+		// Switch-source: the first attempt honours the configured mode;
+		// when the judge says the evidence is insufficient, retries fuse
+		// the lexical leg by switching to hybrid with the reformulated query.
+		mode := uc.searchMode
+		if mode == "" {
+			mode = ports.SearchModeVector
+		}
+		if attempt > 1 {
+			mode = ports.SearchModeHybrid
+		}
+
 		embedStart := time.Now()
-		hits, err := searchHits(ctx, uc.embedder, uc.store, query, uc.topK)
+		hits, err := searchHits(ctx, uc.embedder, uc.store, query, uc.topK, mode)
 		if err != nil {
 			return nil, fmt.Errorf("agentic ask: %w", err)
 		}
@@ -171,6 +191,7 @@ func (uc *AgenticAsk) retrieve(ctx context.Context, question string, result *Age
 
 		result.Attempts = attempt
 		result.Queries = append(result.Queries, query)
+		result.Modes = append(result.Modes, string(mode))
 		last = hits
 
 		judgeStart := time.Now()

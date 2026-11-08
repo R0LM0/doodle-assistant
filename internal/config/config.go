@@ -9,6 +9,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/r0lm0/doodle-assistant/internal/ports"
 )
 
 // Development defaults mirror docker-compose.yml. They are not secrets: they are
@@ -28,6 +30,8 @@ const (
 	defaultHTTPAddr       = ":8080"
 	defaultWebDir         = "web/dist"
 	defaultLogLevel       = "info"
+	defaultSearchMode     = "vector"
+	defaultRRFK           = 60
 )
 
 // Config is everything the binary needs to run.
@@ -46,6 +50,8 @@ type Config struct {
 	HTTPAddr       string
 	WebDir         string
 	LogLevel       slog.Level
+	SearchMode     ports.SearchMode
+	RRFK           float64
 }
 
 // Load reads the environment and fails on values that cannot work. Defaults are
@@ -80,6 +86,14 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	searchMode, err := parseSearchMode(env("SEARCH_MODE", defaultSearchMode))
+	if err != nil {
+		return Config{}, err
+	}
+	rrfK, err := floatEnv("RRF_K", defaultRRFK)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		DatabaseURL:    env("DATABASE_URL", defaultDatabaseURL),
@@ -96,6 +110,8 @@ func Load() (Config, error) {
 		HTTPAddr:       env("HTTP_ADDR", defaultHTTPAddr),
 		WebDir:         env("WEB_DIR", defaultWebDir),
 		LogLevel:       level,
+		SearchMode:     searchMode,
+		RRFK:           rrfK,
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -135,6 +151,14 @@ func (c Config) validate() error {
 	if c.TopK <= 0 {
 		return fmt.Errorf("config: TOP_K must be positive, got %d", c.TopK)
 	}
+	if c.RRFK <= 0 {
+		return fmt.Errorf("config: RRF_K must be positive, got %v", c.RRFK)
+	}
+	switch c.SearchMode {
+	case ports.SearchModeVector, ports.SearchModeLexical, ports.SearchModeHybrid:
+	default:
+		return fmt.Errorf("config: SEARCH_MODE must be vector, lexical or hybrid, got %q", string(c.SearchMode))
+	}
 	return nil
 }
 
@@ -153,6 +177,31 @@ func intEnv(key string, fallback int) (int, error) {
 	value, err := strconv.Atoi(raw)
 	if err != nil {
 		return 0, fmt.Errorf("config: %s must be an integer, got %q", key, raw)
+	}
+	return value, nil
+}
+
+func parseSearchMode(raw string) (ports.SearchMode, error) {
+	switch ports.SearchMode(strings.ToLower(strings.TrimSpace(raw))) {
+	case ports.SearchModeVector:
+		return ports.SearchModeVector, nil
+	case ports.SearchModeLexical:
+		return ports.SearchModeLexical, nil
+	case ports.SearchModeHybrid:
+		return ports.SearchModeHybrid, nil
+	default:
+		return "", fmt.Errorf("config: SEARCH_MODE must be vector, lexical or hybrid, got %q", raw)
+	}
+}
+
+func floatEnv(key string, fallback float64) (float64, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return 0, fmt.Errorf("config: %s must be a number, got %q", key, raw)
 	}
 	return value, nil
 }

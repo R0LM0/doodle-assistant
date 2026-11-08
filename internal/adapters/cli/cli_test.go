@@ -187,7 +187,7 @@ func TestAskStreamsAnswerAndPrintsSources(t *testing.T) {
 				Question: "¿gif transparente?",
 				Text:     "El fondo transparente solo en PNG y WebM.",
 				Sources: []domain.Source{
-					{SourcePath: "export.md", HeadingPath: "Exportar > Fondo", Distance: 0.18},
+					{SourcePath: "export.md", HeadingPath: "Exportar > Fondo", Score: 0.82},
 				},
 			},
 			Retrieved:    1,
@@ -289,6 +289,18 @@ func TestEvalRejectsInvalidK(t *testing.T) {
 	}
 	if code := c.Run(context.Background(), []string{"eval", "-k", "0"}); code != 2 {
 		t.Fatalf("exit code = %d, want 2", code)
+	}
+}
+
+func TestEvalRejectsInvalidMode(t *testing.T) {
+	ev := &fakeEvaluator{}
+	c, _, errOut := newCLI(t, cli.Deps{Evaluator: ev})
+
+	if code := c.Run(context.Background(), []string{"eval", "-mode", "bm25"}); code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(errOut.String(), "mode must be") {
+		t.Errorf("stderr = %q", errOut.String())
 	}
 }
 

@@ -107,6 +107,90 @@
       "expectedSources": ["export.md"],
       "expectedHeading": "FPS",
       "expectedText": "de 1 a 60"
+    },
+    {
+      "id": "q16",
+      "question": "¿Qué atajo agrupa las capas seleccionadas?",
+      "expectedSources": ["shortcuts.md"],
+      "expectedHeading": "Capas",
+      "expectedText": "Ctrl+G"
+    },
+    {
+      "id": "q17",
+      "question": "¿Cómo muevo la vista con la tecla \"Espacio\"?",
+      "expectedSources": ["shortcuts.md"],
+      "expectedHeading": "Generales",
+      "expectedText": "mueve la vista"
+    },
+    {
+      "id": "q18",
+      "question": "¿Cuántos colores guarda cada paleta?",
+      "expectedSources": ["palettes.md"],
+      "expectedHeading": "Límites",
+      "expectedText": "24 colores"
+    },
+    {
+      "id": "q19",
+      "question": "¿En qué formato \".gpl\" se importan las paletas?",
+      "expectedSources": ["palettes.md"],
+      "expectedHeading": "Importar",
+      "expectedText": ".gpl"
+    },
+    {
+      "id": "q20",
+      "question": "¿Cuántos ejes tiene el modo caleidoscopio de simetría?",
+      "expectedSources": ["symmetry.md"],
+      "expectedHeading": "Modos",
+      "expectedText": "6 ejes"
+    },
+    {
+      "id": "q21",
+      "question": "¿Qué hace el modo \"espejo vertical\"?",
+      "expectedSources": ["symmetry.md"],
+      "expectedHeading": "Modos",
+      "expectedText": "eje vertical"
+    },
+    {
+      "id": "q22",
+      "question": "¿Entre qué tamaños se puede elegir el texto?",
+      "expectedSources": ["text.md"],
+      "expectedHeading": "Propiedades",
+      "expectedText": "8 a 144 puntos"
+    },
+    {
+      "id": "q23",
+      "question": "¿Qué opción curva el texto en un arco?",
+      "expectedSources": ["text.md"],
+      "expectedHeading": "arco",
+      "expectedText": "Texto en arco"
+    },
+    {
+      "id": "q24",
+      "question": "¿Cuántas plantillas trae la app?",
+      "expectedSources": ["templates.md"],
+      "expectedHeading": "Incluidas",
+      "expectedText": "9 plantillas"
+    },
+    {
+      "id": "q25",
+      "question": "¿Cuántas copias de respaldo conserva cada proyecto?",
+      "expectedSources": ["autosave.md"],
+      "expectedHeading": "respaldo",
+      "expectedText": "5 copias"
+    },
+    {
+      "id": "q26",
+      "question": "¿Cuándo caduca el enlace para compartir?",
+      "expectedSources": ["sharing.md"],
+      "expectedHeading": "Enlace",
+      "expectedText": "7 días"
+    },
+    {
+      "id": "q27",
+      "question": "¿Qué tecla mantiene las proporciones al dibujar formas?",
+      "expectedSources": ["shapes.md"],
+      "expectedHeading": "Proporciones",
+      "expectedText": "Mayús"
     }
   ]
 }
