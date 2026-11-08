@@ -307,7 +307,18 @@ OLLAMA_BASE_URL=http://localhost:11434
 CHAT_MODEL=gemma-4-e4b          # must report the "tools" capability before phase 4
 EMBED_MODEL=embeddinggemma      # 768 dimensions, 2048 ctx, multilingual
 EMBED_DIM=768                   # must match vector(N) in migrations
+
+HTTP_ADDR=127.0.0.1:8080       # loopback default; compose overrides with :8080
+API_TOKEN=                     # empty = open dev default (warns); set = Bearer required on ask/agent
+RATE_LIMIT_RPS=1               # per-IP token refill on ask/agent
+RATE_LIMIT_BURST=5             # per-IP burst on ask/agent
 ```
+
+Without `API_TOKEN`, `POST /api/ask` and `POST /api/agent` answer whoever
+reaches the listener — the loopback default and the compose loopback publish
+are what keep that local. Set `API_TOKEN` before exposing the port and put the
+same value in the UI token field (stored in the browser only). Health, stats
+and the static UI stay open and are never rate-limited.
 
 Moving to Neon later is a `DATABASE_URL` change only; pgvector stays available
 there, so no code path depends on the local container.
