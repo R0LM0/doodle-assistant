@@ -28,6 +28,7 @@ COPY --from=build /out/assistant /app/assistant
 COPY --from=build /src/web/dist /app/web/dist
 COPY --from=build /src/docs /app/docs
 COPY --from=build /src/migrations /app/migrations
+COPY --from=build /src/eval /app/eval
 
 ENV HTTP_ADDR=:8080 \
     WEB_DIR=/app/web/dist \

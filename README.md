@@ -36,11 +36,13 @@ the phase 3 chunk-size evaluation.
 # 1. Local Postgres + pgvector (host port 5434: 5432/5433 are already in use)
 docker compose up -d
 
-# 2. Preflight: container health, pgvector, Ollama, models, embedding dim
+# 2. Apply migrations first: they create the pgvector extension the preflight checks for
+ go run ./cmd/assistant migrate
+
+# 3. Preflight: container health, pgvector, Ollama, models, embedding dim
 scripts/healthcheck.sh
 
-# 3. Apply migrations, index the knowledge base, inspect the result
-go run ./cmd/assistant migrate
+# 4. Index the knowledge base, inspect the result
 go run ./cmd/assistant ingest
 go run ./cmd/assistant stats
 ```
@@ -260,7 +262,8 @@ docker compose run --rm app ingest              # index the docs
 The image is multi-stage: Node builds the UI, Go builds a static binary, and the runtime
 is `distroless/static:nonroot` — no shell, no package manager, non-root by default.
 
-Moving to Neon is a `DATABASE_URL` change; Neon's free plan includes pgvector, 1 GB of
+Moving to Neon is a `DATABASE_URL` change (the compose `app` service honours
+`${DATABASE_URL}`, defaulting to the local `postgres` service); Neon's free plan includes pgvector, 1 GB of
 storage and 100 CU-hours per project, with compute scaling to zero after 5 minutes.
 
 Free hosting is the awkward part of this project, and not for the reason it looks: the
